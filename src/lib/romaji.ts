@@ -1,338 +1,331 @@
-// ローマ字変換とバリエーション対応
+import { toRomaji, isRomaji, toHiragana } from 'wanakana'
 
-export interface RomajiVariation {
-  [key: string]: string[]
+// タイピング統計情報の型定義
+export interface TypingStats {
+  startTime: number
+  endTime?: number
+  totalKeystrokes: number
+  errorCount: number
+  correctKeystrokes: number
+  wpm: number
+  accuracy: number
+  elapsedTime: number
 }
 
-// ひらがな→ローマ字の変換表（複数の入力方式対応）
-export const hiraganaToRomaji: RomajiVariation = {
-  'あ': ['a'],
-  'い': ['i'],
-  'う': ['u'],
-  'え': ['e'],
-  'お': ['o'],
-  'か': ['ka'],
-  'き': ['ki'],
-  'く': ['ku'],
-  'け': ['ke'],
-  'こ': ['ko'],
-  'が': ['ga'],
-  'ぎ': ['gi'],
-  'ぐ': ['gu'],
-  'げ': ['ge'],
-  'ご': ['go'],
-  'さ': ['sa'],
-  'し': ['si', 'shi'],
-  'す': ['su'],
-  'せ': ['se'],
-  'そ': ['so'],
-  'ざ': ['za'],
-  'じ': ['zi', 'ji'],
-  'ず': ['zu'],
-  'ぜ': ['ze'],
-  'ぞ': ['zo'],
-  'た': ['ta'],
-  'ち': ['ti', 'chi'],
-  'つ': ['tu', 'tsu'],
-  'て': ['te'],
-  'と': ['to'],
-  'だ': ['da'],
-  'ぢ': ['di'],
-  'づ': ['du'],
-  'で': ['de'],
-  'ど': ['do'],
-  'な': ['na'],
-  'に': ['ni'],
-  'ぬ': ['nu'],
-  'ね': ['ne'],
-  'の': ['no'],
-  'は': ['ha'],
-  'ひ': ['hi'],
-  'ふ': ['hu', 'fu'],
-  'へ': ['he'],
-  'ほ': ['ho'],
-  'ば': ['ba'],
-  'び': ['bi'],
-  'ぶ': ['bu'],
-  'べ': ['be'],
-  'ぼ': ['bo'],
-  'ぱ': ['pa'],
-  'ぴ': ['pi'],
-  'ぷ': ['pu'],
-  'ぺ': ['pe'],
-  'ぽ': ['po'],
-  'ま': ['ma'],
-  'み': ['mi'],
-  'む': ['mu'],
-  'め': ['me'],
-  'も': ['mo'],
-  'や': ['ya'],
-  'ゆ': ['yu'],
-  'よ': ['yo'],
-  'ら': ['ra'],
-  'り': ['ri'],
-  'る': ['ru'],
-  'れ': ['re'],
-  'ろ': ['ro'],
-  'わ': ['wa'],
-  'を': ['wo', 'o'],
-  'ん': ['n', 'nn'],
-  'ー': ['-'],
-  '。': ['.'],
-  '、': [','],
-  ' ': [' '],
-  '　': [' '],
-  // 小さい文字
-  'ゃ': ['ya'],
-  'ゅ': ['yu'],
-  'ょ': ['yo'],
-  'っ': [''],
-  // 拗音
-  'きゃ': ['kya'],
-  'きゅ': ['kyu'],
-  'きょ': ['kyo'],
-  'しゃ': ['sya', 'sha'],
-  'しゅ': ['syu', 'shu'],
-  'しょ': ['syo', 'sho'],
-  'ちゃ': ['tya', 'cha'],
-  'ちゅ': ['tyu', 'chu'],
-  'ちょ': ['tyo', 'cho'],
-  'にゃ': ['nya'],
-  'にゅ': ['nyu'],
-  'にょ': ['nyo'],
-  'ひゃ': ['hya'],
-  'ひゅ': ['hyu'],
-  'ひょ': ['hyo'],
-  'みゃ': ['mya'],
-  'みゅ': ['myu'],
-  'みょ': ['myo'],
-  'りゃ': ['rya'],
-  'りゅ': ['ryu'],
-  'りょ': ['ryo'],
-  'ぎゃ': ['gya'],
-  'ぎゅ': ['gyu'],
-  'ぎょ': ['gyo'],
-  'じゃ': ['zya', 'ja'],
-  'じゅ': ['zyu', 'ju'],
-  'じょ': ['zyo', 'jo'],
-  'びゃ': ['bya'],
-  'びゅ': ['byu'],
-  'びょ': ['byo'],
-  'ぴゃ': ['pya'],
-  'ぴゅ': ['pyu'],
-  'ぴょ': ['pyo']
+// 単語タイピング統計の型定義
+export interface WordTypingStats extends TypingStats {
+  wordIndex: number
+  expectedInput: string
+  actualInput: string
+  isCompleted: boolean
 }
 
-// カタカナ→ローマ字の変換表
-export const katakanaToRomaji: RomajiVariation = {
-  'ア': ['a'],
-  'イ': ['i'],
-  'ウ': ['u'],
-  'エ': ['e'],
-  'オ': ['o'],
-  'カ': ['ka'],
-  'キ': ['ki'],
-  'ク': ['ku'],
-  'ケ': ['ke'],
-  'コ': ['ko'],
-  'ガ': ['ga'],
-  'ギ': ['gi'],
-  'グ': ['gu'],
-  'ゲ': ['ge'],
-  'ゴ': ['go'],
-  'サ': ['sa'],
-  'シ': ['si', 'shi'],
-  'ス': ['su'],
-  'セ': ['se'],
-  'ソ': ['so'],
-  'ザ': ['za'],
-  'ジ': ['zi', 'ji'],
-  'ズ': ['zu'],
-  'ゼ': ['ze'],
-  'ゾ': ['zo'],
-  'タ': ['ta'],
-  'チ': ['ti', 'chi'],
-  'ツ': ['tu', 'tsu'],
-  'テ': ['te'],
-  'ト': ['to'],
-  'ダ': ['da'],
-  'ヂ': ['di'],
-  'ヅ': ['du'],
-  'デ': ['de'],
-  'ド': ['do'],
-  'ナ': ['na'],
-  'ニ': ['ni'],
-  'ヌ': ['nu'],
-  'ネ': ['ne'],
-  'ノ': ['no'],
-  'ハ': ['ha'],
-  'ヒ': ['hi'],
-  'フ': ['hu', 'fu'],
-  'ヘ': ['he'],
-  'ホ': ['ho'],
-  'バ': ['ba'],
-  'ビ': ['bi'],
-  'ブ': ['bu'],
-  'ベ': ['be'],
-  'ボ': ['bo'],
-  'パ': ['pa'],
-  'ピ': ['pi'],
-  'プ': ['pu'],
-  'ペ': ['pe'],
-  'ポ': ['po'],
-  'マ': ['ma'],
-  'ミ': ['mi'],
-  'ム': ['mu'],
-  'メ': ['me'],
-  'モ': ['mo'],
-  'ヤ': ['ya'],
-  'ユ': ['yu'],
-  'ヨ': ['yo'],
-  'ラ': ['ra'],
-  'リ': ['ri'],
-  'ル': ['ru'],
-  'レ': ['re'],
-  'ロ': ['ro'],
-  'ワ': ['wa'],
-  'ヲ': ['wo', 'o'],
-  'ン': ['n', 'nn'],
-  'ー': ['-'],
-  '。': ['.'],
-  '、': [','],
-  ' ': [' '],
-  '　': [' '],
-  // 小さい文字
-  'ャ': ['ya'],
-  'ュ': ['yu'],
-  'ョ': ['yo'],
-  'ッ': [''],
-  // 拗音
-  'キャ': ['kya'],
-  'キュ': ['kyu'],
-  'キョ': ['kyo'],
-  'シャ': ['sya', 'sha'],
-  'シュ': ['syu', 'shu'],
-  'ショ': ['syo', 'sho'],
-  'チャ': ['tya', 'cha'],
-  'チュ': ['tyu', 'chu'],
-  'チョ': ['tyo', 'cho'],
-  'ニャ': ['nya'],
-  'ニュ': ['nyu'],
-  'ニョ': ['nyo'],
-  'ヒャ': ['hya'],
-  'ヒュ': ['hyu'],
-  'ヒョ': ['hyo'],
-  'ミャ': ['mya'],
-  'ミュ': ['myu'],
-  'ミョ': ['myo'],
-  'リャ': ['rya'],
-  'リュ': ['ryu'],
-  'リョ': ['ryo'],
-  'ギャ': ['gya'],
-  'ギュ': ['gyu'],
-  'ギョ': ['gyo'],
-  'ジャ': ['zya', 'ja'],
-  'ジュ': ['zyu', 'ju'],
-  'ジョ': ['zyo', 'jo'],
-  'ビャ': ['bya'],
-  'ビュ': ['byu'],
-  'ビョ': ['byo'],
-  'ピャ': ['pya'],
-  'ピュ': ['pyu'],
-  'ピョ': ['pyo']
+// ローマ字入力方式の種類
+export enum RomajiStyle {
+  HEPBURN = 'hepburn',      // ヘボン式（標準）
+  KUNREI = 'kunrei',        // 訓令式
+  NIHON = 'nihon'           // 日本式
 }
 
-// 文字列を解析してローマ字パターンに変換
-export function convertToRomajiPatterns(text: string): string[] {
-  const result: string[] = []
-  let i = 0
+// ローマ字パターンマップ（wanakakaのサポート外の特殊ケース用）
+const customRomajiPatterns: { [key: string]: { [key in RomajiStyle]: string[] } } = {
+  'ん': {
+    [RomajiStyle.HEPBURN]: ['n', 'nn'],
+    [RomajiStyle.KUNREI]: ['n', 'nn'],
+    [RomajiStyle.NIHON]: ['n', 'nn']
+  },
+  'し': {
+    [RomajiStyle.HEPBURN]: ['shi'],
+    [RomajiStyle.KUNREI]: ['si'],
+    [RomajiStyle.NIHON]: ['si']
+  },
+  'ち': {
+    [RomajiStyle.HEPBURN]: ['chi'],
+    [RomajiStyle.KUNREI]: ['ti'],
+    [RomajiStyle.NIHON]: ['ti']
+  },
+  'つ': {
+    [RomajiStyle.HEPBURN]: ['tsu'],
+    [RomajiStyle.KUNREI]: ['tu'],
+    [RomajiStyle.NIHON]: ['tu']
+  },
+  'ふ': {
+    [RomajiStyle.HEPBURN]: ['fu'],
+    [RomajiStyle.KUNREI]: ['hu'],
+    [RomajiStyle.NIHON]: ['hu']
+  },
+  'じ': {
+    [RomajiStyle.HEPBURN]: ['ji'],
+    [RomajiStyle.KUNREI]: ['zi'],
+    [RomajiStyle.NIHON]: ['zi']
+  },
+  'づ': {
+    [RomajiStyle.HEPBURN]: ['zu'],
+    [RomajiStyle.KUNREI]: ['du'],
+    [RomajiStyle.NIHON]: ['du']
+  },
+  'しゃ': {
+    [RomajiStyle.HEPBURN]: ['sha'],
+    [RomajiStyle.KUNREI]: ['sya'],
+    [RomajiStyle.NIHON]: ['sya']
+  },
+  'しゅ': {
+    [RomajiStyle.HEPBURN]: ['shu'],
+    [RomajiStyle.KUNREI]: ['syu'],
+    [RomajiStyle.NIHON]: ['syu']
+  },
+  'しょ': {
+    [RomajiStyle.HEPBURN]: ['sho'],
+    [RomajiStyle.KUNREI]: ['syo'],
+    [RomajiStyle.NIHON]: ['syo']
+  },
+  'ちゃ': {
+    [RomajiStyle.HEPBURN]: ['cha'],
+    [RomajiStyle.KUNREI]: ['tya'],
+    [RomajiStyle.NIHON]: ['tya']
+  },
+  'ちゅ': {
+    [RomajiStyle.HEPBURN]: ['chu'],
+    [RomajiStyle.KUNREI]: ['tyu'],
+    [RomajiStyle.NIHON]: ['tyu']
+  },
+  'ちょ': {
+    [RomajiStyle.HEPBURN]: ['cho'],
+    [RomajiStyle.KUNREI]: ['tyo'],
+    [RomajiStyle.NIHON]: ['tyo']
+  },
+  'じゃ': {
+    [RomajiStyle.HEPBURN]: ['ja'],
+    [RomajiStyle.KUNREI]: ['zya'],
+    [RomajiStyle.NIHON]: ['zya']
+  },
+  'じゅ': {
+    [RomajiStyle.HEPBURN]: ['ju'],
+    [RomajiStyle.KUNREI]: ['zyu'],
+    [RomajiStyle.NIHON]: ['zyu']
+  },
+  'じょ': {
+    [RomajiStyle.HEPBURN]: ['jo'],
+    [RomajiStyle.KUNREI]: ['zyo'],
+    [RomajiStyle.NIHON]: ['zyo']
+  }
+}
+
+// wanakakaを使用したローマ字変換（デフォルトはヘボン式）
+export function convertToRomaji(text: string, style: RomajiStyle = RomajiStyle.HEPBURN): string {
+  // wanakakaは基本的にヘボン式ベース
+  let romaji = toRomaji(text)
   
-  while (i < text.length) {
-    let matched = false
-    
-    // 3文字の組み合わせをチェック（拗音など）
-    if (i + 2 < text.length) {
-      const threeChar = text.substring(i, i + 3)
-      if (hiraganaToRomaji[threeChar] || katakanaToRomaji[threeChar]) {
-        const patterns = hiraganaToRomaji[threeChar] || katakanaToRomaji[threeChar]
-        patterns.forEach(pattern => {
-          if (pattern !== '') result.push(pattern)
-        })
-        i += 3
-        matched = true
-      }
+  // 方式に応じて変換
+  if (style === RomajiStyle.KUNREI || style === RomajiStyle.NIHON) {
+    romaji = romaji
+      .replace(/shi/g, 'si')
+      .replace(/chi/g, 'ti')
+      .replace(/tsu/g, 'tu')
+      .replace(/fu/g, 'hu')
+      .replace(/ji/g, 'zi')
+      .replace(/sha/g, 'sya')
+      .replace(/shu/g, 'syu')
+      .replace(/sho/g, 'syo')
+      .replace(/cha/g, 'tya')
+      .replace(/chu/g, 'tyu')
+      .replace(/cho/g, 'tyo')
+      .replace(/ja/g, 'zya')
+      .replace(/ju/g, 'zyu')
+      .replace(/jo/g, 'zyo')
+  }
+  
+  return romaji
+}
+
+// 複数の入力方式に対応した検証
+export function getRomajiPatterns(text: string): string[] {
+  const patterns: string[] = []
+  
+  // ヘボン式
+  patterns.push(convertToRomaji(text, RomajiStyle.HEPBURN))
+  
+  // 訓令式
+  patterns.push(convertToRomaji(text, RomajiStyle.KUNREI))
+  
+  // 日本式
+  patterns.push(convertToRomaji(text, RomajiStyle.NIHON))
+  
+  // 重複を除去
+  return [...new Set(patterns)]
+}
+
+// 単語のタイピング統計を初期化
+export function initializeWordStats(wordIndex: number, expectedInput: string): WordTypingStats {
+  return {
+    wordIndex,
+    expectedInput,
+    actualInput: '',
+    startTime: Date.now(),
+    totalKeystrokes: 0,
+    errorCount: 0,
+    correctKeystrokes: 0,
+    wpm: 0,
+    accuracy: 100,
+    elapsedTime: 0,
+    isCompleted: false
+  }
+}
+
+// キーストロークごとの統計更新
+export function updateWordStats(
+  stats: WordTypingStats, 
+  newInput: string, 
+  isError: boolean = false
+): WordTypingStats {
+  const updatedStats = { ...stats }
+  const inputLengthDiff = newInput.length - stats.actualInput.length
+  
+  // キーストローク数を更新
+  if (inputLengthDiff > 0) {
+    updatedStats.totalKeystrokes += inputLengthDiff
+    if (isError) {
+      updatedStats.errorCount += inputLengthDiff
+    } else {
+      updatedStats.correctKeystrokes += inputLengthDiff
     }
-    
-    // 2文字の組み合わせをチェック
-    if (!matched && i + 1 < text.length) {
-      const twoChar = text.substring(i, i + 2)
-      if (hiraganaToRomaji[twoChar] || katakanaToRomaji[twoChar]) {
-        const patterns = hiraganaToRomaji[twoChar] || katakanaToRomaji[twoChar]
-        patterns.forEach(pattern => {
-          if (pattern !== '') result.push(pattern)
-        })
-        i += 2
-        matched = true
+  } else if (inputLengthDiff < 0) {
+    // バックスペースの場合
+    updatedStats.totalKeystrokes += Math.abs(inputLengthDiff)
+  }
+  
+  updatedStats.actualInput = newInput
+  updatedStats.elapsedTime = Date.now() - stats.startTime
+  
+  // WPM計算（文字数ベース、平均5文字/単語として計算）
+  const minutes = updatedStats.elapsedTime / (1000 * 60)
+  if (minutes > 0) {
+    updatedStats.wpm = (updatedStats.correctKeystrokes / 5) / minutes
+  }
+  
+  // 正確性計算
+  if (updatedStats.totalKeystrokes > 0) {
+    updatedStats.accuracy = (updatedStats.correctKeystrokes / updatedStats.totalKeystrokes) * 100
+  }
+  
+  // 完了チェック
+  const patterns = getRomajiPatterns(stats.expectedInput)
+  updatedStats.isCompleted = patterns.some(pattern => pattern === newInput.toLowerCase())
+  
+  if (updatedStats.isCompleted) {
+    updatedStats.endTime = Date.now()
+  }
+  
+  return updatedStats
+}
+
+// 固定入力方式での検証（生徒用）
+export function validateFixedRomajiInput(
+  targetText: string, 
+  userInput: string, 
+  style: RomajiStyle = RomajiStyle.HEPBURN
+): {
+  isValid: boolean
+  correctLength: number
+  isComplete: boolean
+  expectedRomaji: string
+  errorPositions: number[]
+} {
+  const expected = convertToRomaji(targetText, style)
+  const input = userInput.toLowerCase()
+  
+  let correctLength = 0
+  let isValid = true
+  const errorPositions: number[] = []
+  
+  // 文字ごとの比較
+  for (let i = 0; i < input.length; i++) {
+    if (i < expected.length && input[i] === expected[i]) {
+      correctLength++
+    } else {
+      if (i < expected.length) {
+        errorPositions.push(i)
       }
-    }
-    
-    // 1文字をチェック
-    if (!matched) {
-      const oneChar = text[i]
-      if (hiraganaToRomaji[oneChar] || katakanaToRomaji[oneChar]) {
-        const patterns = hiraganaToRomaji[oneChar] || katakanaToRomaji[oneChar]
-        patterns.forEach(pattern => {
-          if (pattern !== '') result.push(pattern)
-        })
-      } else {
-        // 漢字や英数字などはそのまま
-        result.push(oneChar)
-      }
-      i += 1
+      isValid = false
     }
   }
   
-  return result
+  // 入力が期待される文字列を超えていない場合は一時的に有効とする
+  if (input.length <= expected.length && errorPositions.length === 0) {
+    isValid = true
+  }
+  
+  const isComplete = input.length === expected.length && correctLength === expected.length
+  
+  return {
+    isValid,
+    correctLength,
+    isComplete,
+    expectedRomaji: expected,
+    errorPositions
+  }
 }
 
-// ローマ字入力の妥当性チェック（複数パターン対応）
-export function validateRomajiInput(targetText: string, userInput: string): {
+// 柔軟な入力検証（複数方式対応）
+export function validateFlexibleRomajiInput(
+  targetText: string, 
+  userInput: string
+): {
   isValid: boolean
   correctLength: number
-  expectedNext: string[]
+  isComplete: boolean
+  matchedPattern: string
+  matchedStyle: RomajiStyle
+  errorPositions: number[]
 } {
-  // 全ての可能なローマ字パターンを生成
-  const allPossibleInputs = generateAllRomajiCombinations(targetText)
+  const input = userInput.toLowerCase()
+  const patterns = [
+    { pattern: convertToRomaji(targetText, RomajiStyle.HEPBURN), style: RomajiStyle.HEPBURN },
+    { pattern: convertToRomaji(targetText, RomajiStyle.KUNREI), style: RomajiStyle.KUNREI },
+    { pattern: convertToRomaji(targetText, RomajiStyle.NIHON), style: RomajiStyle.NIHON }
+  ]
   
   let bestMatch = {
     isValid: false,
     correctLength: 0,
-    expectedNext: [] as string[]
+    isComplete: false,
+    matchedPattern: '',
+    matchedStyle: RomajiStyle.HEPBURN,
+    errorPositions: [] as number[]
   }
   
-  // 各パターンで検証
-  for (const possibleInput of allPossibleInputs) {
-    let currentPos = 0
-    let correctChars = 0
+  for (const { pattern, style } of patterns) {
+    let correctLength = 0
+    let isValid = true
+    const errorPositions: number[] = []
     
-    for (let i = 0; i < userInput.length; i++) {
-      if (currentPos < possibleInput.length && userInput[i] === possibleInput[currentPos]) {
-        currentPos++
-        correctChars++
+    for (let i = 0; i < input.length; i++) {
+      if (i < pattern.length && input[i] === pattern[i]) {
+        correctLength++
       } else {
-        break
+        if (i < pattern.length) {
+          errorPositions.push(i)
+        }
+        isValid = false
       }
     }
     
-    const isValid = correctChars === userInput.length
-    const expectedNext = currentPos < possibleInput.length ? [possibleInput[currentPos]] : []
+    if (input.length <= pattern.length && errorPositions.length === 0) {
+      isValid = true
+    }
     
-    // より良いマッチを見つけた場合は更新
-    if (correctChars > bestMatch.correctLength || (correctChars === bestMatch.correctLength && isValid)) {
+    const isComplete = input.length === pattern.length && correctLength === pattern.length
+    
+    // より良いマッチを見つけた場合
+    if (correctLength > bestMatch.correctLength || 
+        (correctLength === bestMatch.correctLength && isValid && !bestMatch.isValid)) {
       bestMatch = {
         isValid,
-        correctLength: correctChars,
-        expectedNext
+        correctLength,
+        isComplete,
+        matchedPattern: pattern,
+        matchedStyle: style,
+        errorPositions
       }
     }
   }
@@ -340,108 +333,43 @@ export function validateRomajiInput(targetText: string, userInput: string): {
   return bestMatch
 }
 
-// 全ての可能なローマ字の組み合わせを生成
-function generateAllRomajiCombinations(text: string): string[] {
-  const segments: string[][] = []
-  let i = 0
-  
-  while (i < text.length) {
-    let matched = false
-    
-    // 3文字の組み合わせをチェック
-    if (i + 2 < text.length) {
-      const threeChar = text.substring(i, i + 3)
-      if (hiraganaToRomaji[threeChar] || katakanaToRomaji[threeChar]) {
-        segments.push(hiraganaToRomaji[threeChar] || katakanaToRomaji[threeChar])
-        i += 3
-        matched = true
-      }
-    }
-    
-    // 2文字の組み合わせをチェック
-    if (!matched && i + 1 < text.length) {
-      const twoChar = text.substring(i, i + 2)
-      if (hiraganaToRomaji[twoChar] || katakanaToRomaji[twoChar]) {
-        segments.push(hiraganaToRomaji[twoChar] || katakanaToRomaji[twoChar])
-        i += 2
-        matched = true
-      }
-    }
-    
-    // 1文字をチェック
-    if (!matched) {
-      const oneChar = text[i]
-      if (hiraganaToRomaji[oneChar] || katakanaToRomaji[oneChar]) {
-        segments.push(hiraganaToRomaji[oneChar] || katakanaToRomaji[oneChar])
-      } else {
-        segments.push([oneChar])
-      }
-      i += 1
-    }
-  }
-  
-  // 全ての組み合わせを生成
-  function generateCombinations(segmentIndex: number, currentCombination: string): string[] {
-    if (segmentIndex >= segments.length) {
-      return [currentCombination]
-    }
-    
-    const results = []
-    const currentSegment = segments[segmentIndex]
-    
-    for (const option of currentSegment) {
-      const newCombinations = generateCombinations(segmentIndex + 1, currentCombination + option)
-      results.push(...newCombinations)
-    }
-    
-    return results
-  }
-  
-  return generateCombinations(0, '')
+// 旧関数との互換性を保つためのラッパー関数
+export function convertToRomajiPatterns(text: string): string[] {
+  return getRomajiPatterns(text)
 }
 
-// 進捗計算（ローマ字ベース、複数パターン対応）
+export function getShortestRomajiPattern(targetText: string): string {
+  return convertToRomaji(targetText, RomajiStyle.HEPBURN)
+}
+
+export function validateRomajiInput(targetText: string, userInput: string): {
+  isValid: boolean
+  correctLength: number
+  expectedRomaji: string
+} {
+  const result = validateFlexibleRomajiInput(targetText, userInput)
+  return {
+    isValid: result.isValid,
+    correctLength: result.correctLength,
+    expectedRomaji: result.matchedPattern
+  }
+}
+
 export function calculateRomajiProgress(targetText: string, userInput: string): {
   progress: number
   isComplete: boolean
 } {
-  const allPossibleInputs = generateAllRomajiCombinations(targetText)
+  const result = validateFlexibleRomajiInput(targetText, userInput)
+  const expectedLength = result.matchedPattern.length
   
-  let bestProgress = 0
-  let isComplete = false
-  
-  for (const possibleInput of allPossibleInputs) {
-    const validation = validateRomajiInputSingle(possibleInput, userInput)
-    const progress = possibleInput.length > 0 ? (validation.correctLength / possibleInput.length) * 100 : 0
-    
-    if (progress > bestProgress) {
-      bestProgress = progress
-    }
-    
-    if (validation.correctLength >= possibleInput.length) {
-      isComplete = true
-    }
+  if (expectedLength === 0) {
+    return { progress: 0, isComplete: false }
   }
+
+  const progress = (result.correctLength / expectedLength) * 100
   
   return {
-    progress: Math.min(bestProgress, 100),
-    isComplete
+    progress: Math.min(progress, 100),
+    isComplete: result.isComplete
   }
-}
-
-// 単一パターンでの検証（内部用）
-function validateRomajiInputSingle(targetRomaji: string, userInput: string): {
-  correctLength: number
-} {
-  let correctChars = 0
-  
-  for (let i = 0; i < userInput.length; i++) {
-    if (i < targetRomaji.length && userInput[i] === targetRomaji[i]) {
-      correctChars++
-    } else {
-      break
-    }
-  }
-  
-  return { correctLength: correctChars }
 }

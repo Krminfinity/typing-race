@@ -10,8 +10,11 @@ const app = next({ dev, hostname, port })
 const handler = app.getRequestHandler()
 
 // Interface definitions as comments for reference
-// Room: { id, teacherId, text, status, participants, startTime, textType?, difficulty? }
-// Participant: { id, name, progress, wpm, accuracy, finished, finishTime }
+// Room: { id, teacherId, text, status, participants, startTime, textType?, difficulty?, wordList?, currentWordIndex? }
+// Participant: { id, name, progress, wpm, accuracy, finished, finishTime, currentWordIndex? }
+
+// 最大参加者数を30人に設定
+const MAX_PARTICIPANTS = 30
 
 // テキストタイプごとのサンプルテキスト
 const sampleTexts = {
@@ -35,6 +38,79 @@ const sampleTexts = {
     "purogramingu gengo no benkyou",
     "gijutsu no shinpo to kaihatsu",
     "chiimuwaku to koraboreshon"
+  ]
+}
+
+// 単語リスト（寿司打風）
+const wordLists = {
+  japanese_easy: [
+    { hiragana: "あり", romaji: ["ari"] },
+    { hiragana: "いえ", romaji: ["ie"] },
+    { hiragana: "うみ", romaji: ["umi"] },
+    { hiragana: "えき", romaji: ["eki"] },
+    { hiragana: "おか", romaji: ["oka"] },
+    { hiragana: "かき", romaji: ["kaki"] },
+    { hiragana: "くつ", romaji: ["kutsu", "kutu"] },
+    { hiragana: "けが", romaji: ["kega"] },
+    { hiragana: "こま", romaji: ["koma"] },
+    { hiragana: "さくら", romaji: ["sakura"] },
+    { hiragana: "しお", romaji: ["shio", "sio"] },
+    { hiragana: "すし", romaji: ["sushi", "susi"] },
+    { hiragana: "せかい", romaji: ["sekai"] },
+    { hiragana: "そら", romaji: ["sora"] },
+    { hiragana: "たいよう", romaji: ["taiyou", "taiyō"] },
+    { hiragana: "ちず", romaji: ["chizu", "tizu"] },
+    { hiragana: "つき", romaji: ["tsuki", "tuki"] },
+    { hiragana: "てがみ", romaji: ["tegami"] },
+    { hiragana: "とり", romaji: ["tori"] },
+    { hiragana: "なまえ", romaji: ["namae"] }
+  ],
+  japanese_medium: [
+    { hiragana: "がっこう", romaji: ["gakkou", "gakkō"] },
+    { hiragana: "びょういん", romaji: ["byouin", "byōin"] },
+    { hiragana: "りょうり", romaji: ["ryouri", "ryōri"] },
+    { hiragana: "じゅぎょう", romaji: ["jugyou", "jugyō"] },
+    { hiragana: "でんしゃ", romaji: ["densha"] },
+    { hiragana: "きょうしつ", romaji: ["kyoushitsu", "kyōshitsu"] },
+    { hiragana: "しゅくだい", romaji: ["shukudai"] },
+    { hiragana: "ひゃっか", romaji: ["hyakka"] },
+    { hiragana: "ちゃいろ", romaji: ["chairo"] },
+    { hiragana: "にゃんこ", romaji: ["nyanko"] }
+  ],
+  japanese_hard: [
+    { hiragana: "けんきゅうしつ", romaji: ["kenkyuushitsu", "kenkyūshitsu"] },
+    { hiragana: "こうえん", romaji: ["kouen", "kōen"] },
+    { hiragana: "きょうそう", romaji: ["kyousou", "kyōsō"] },
+    { hiragana: "しんじゅく", romaji: ["shinjuku"] },
+    { hiragana: "ちょうちょう", romaji: ["chouchou", "chōchō"] },
+    { hiragana: "りゅうがく", romaji: ["ryuugaku", "ryūgaku"] },
+    { hiragana: "ひゃっぽん", romaji: ["hyappon"] },
+    { hiragana: "きっぷ", romaji: ["kippu"] },
+    { hiragana: "しっぽ", romaji: ["shippo"] }
+  ],
+  english_easy: [
+    { word: "cat", romaji: ["cat"] },
+    { word: "dog", romaji: ["dog"] },
+    { word: "run", romaji: ["run"] },
+    { word: "jump", romaji: ["jump"] },
+    { word: "walk", romaji: ["walk"] },
+    { word: "book", romaji: ["book"] },
+    { word: "pen", romaji: ["pen"] },
+    { word: "car", romaji: ["car"] },
+    { word: "sun", romaji: ["sun"] },
+    { word: "moon", romaji: ["moon"] }
+  ],
+  english_medium: [
+    { word: "computer", romaji: ["computer"] },
+    { word: "keyboard", romaji: ["keyboard"] },
+    { word: "program", romaji: ["program"] },
+    { word: "website", romaji: ["website"] },
+    { word: "internet", romaji: ["internet"] },
+    { word: "practice", romaji: ["practice"] },
+    { word: "exercise", romaji: ["exercise"] },
+    { word: "question", romaji: ["question"] },
+    { word: "answer", romaji: ["answer"] },
+    { word: "student", romaji: ["student"] }
   ]
 }
 
@@ -106,13 +182,28 @@ app.prepare().then(() => {
         return
       }
 
+      // 30人制限チェック
+      if (room.participants.size >= MAX_PARTICIPANTS) {
+        socket.emit('error', { message: `参加者数が上限（${MAX_PARTICIPANTS}人）に達しています` })
+        return
+      }
+
       const participant = {
         id: socket.id,
         name: data.name,
         progress: 0,
         wpm: 0,
         accuracy: 100,
-        finished: false
+        finished: false,
+        currentWordIndex: 0,
+        fixedRomajiPatterns: [], // 生徒固有のローマ字パターンを保存
+        typingStats: {
+          totalKeystrokes: 0,
+          errorCount: 0,
+          correctKeystrokes: 0,
+          startTime: null,
+          wordStats: [] // 各単語の詳細統計
+        }
       }
 
       room.participants.set(socket.id, participant)
@@ -128,7 +219,7 @@ app.prepare().then(() => {
         participants: Array.from(room.participants.values())
       }})
       
-      console.log(`${data.name} joined room ${data.pin}`)
+      console.log(`${data.name} joined room ${data.pin} (${room.participants.size}/${MAX_PARTICIPANTS})`)
     })
 
     // Start race (teacher only)
@@ -140,14 +231,48 @@ app.prepare().then(() => {
         return
       }
 
-      // カスタムテキストがある場合はそれを使用、なければ難易度とタイプから生成
-      let raceText = room.text
-      if (data.textType && data.difficulty && !data.customText) {
-        raceText = generateTextByDifficulty(data.textType, data.difficulty)
-        room.text = raceText
-      } else if (data.customText) {
-        raceText = data.customText
-        room.text = raceText
+      let raceData = {}
+
+      // 単語モードかどうかを判定
+      if (data.mode === 'word') {
+        // 単語リストを生成
+        const wordListKey = `${data.textType}_${data.difficulty}`
+        const wordList = wordLists[wordListKey] || wordLists.japanese_easy
+        
+        // ランダムに20個の単語を選択
+        const shuffled = [...wordList].sort(() => 0.5 - Math.random())
+        const selectedWords = shuffled.slice(0, 20)
+        
+        room.wordList = selectedWords
+        room.currentWordIndex = 0
+        room.mode = 'word'
+        
+        raceData = {
+          mode: 'word',
+          wordList: selectedWords,
+          startTime: Date.now(),
+          textType: data.textType,
+          fixedRomajiPatterns: selectedWords.map(word => word.romaji[0]) // 固定パターンも送信
+        }
+      } else {
+        // 通常の文章モード
+        let raceText = room.text
+        if (data.textType && data.difficulty && !data.customText) {
+          raceText = generateTextByDifficulty(data.textType, data.difficulty)
+          room.text = raceText
+        } else if (data.customText) {
+          raceText = data.customText
+          room.text = raceText
+        }
+
+        room.mode = 'sentence'
+        
+        raceData = {
+          mode: 'sentence',
+          text: raceText,
+          startTime: Date.now(),
+          textType: data.textType
+        }
       }
 
       room.status = 'active'
@@ -155,13 +280,28 @@ app.prepare().then(() => {
       room.textType = data.textType
       room.difficulty = data.difficulty
       
-      io.to(data.pin).emit('race-started', { 
-        text: raceText,
-        startTime: room.startTime,
-        textType: data.textType
+      // 参加者の状態を初期化
+      room.participants.forEach(participant => {
+        participant.currentWordIndex = 0
+        participant.progress = 0
+        participant.wpm = 0
+        participant.accuracy = 100
+        participant.finished = false
+        
+        // 単語モードの場合、各参加者に固定のローマ字パターンを設定
+        if (data.mode === 'word' && data.textType === 'japanese') {
+          participant.fixedRomajiPatterns = selectedWords.map(word => {
+            // 各単語の最短ローマ字パターンを生成
+            return word.romaji[0] // 最初のパターンを固定パターンとして使用
+          })
+        } else {
+          participant.fixedRomajiPatterns = []
+        }
       })
       
-      console.log(`Race started in room ${data.pin} with ${data.textType} text (${data.difficulty})`)
+      io.to(data.pin).emit('race-started', raceData)
+      
+      console.log(`Race started in room ${data.pin} with ${data.mode} mode (${data.textType} ${data.difficulty})`)
     })
 
     // Update progress
@@ -177,12 +317,92 @@ app.prepare().then(() => {
       participant.wpm = data.wpm
       participant.accuracy = data.accuracy
 
+      // 単語モードの場合は単語インデックスも更新
+      if (room.mode === 'word' && data.currentWordIndex !== undefined) {
+        participant.currentWordIndex = data.currentWordIndex
+      }
+
       if (data.progress >= 100 && !participant.finished) {
         participant.finished = true
         participant.finishTime = Date.now()
       }
 
       // Broadcast updated participants to all in room
+      io.to(data.pin).emit('participant-update', {
+        participants: Array.from(room.participants.values())
+      })
+    })
+
+    // 単語完了イベント（単語モード用）
+    socket.on('word-completed', (data) => {
+      const room = rooms.get(data.pin)
+      
+      if (!room || !room.participants.has(socket.id) || room.mode !== 'word') {
+        return
+      }
+
+      const participant = room.participants.get(socket.id)
+      participant.currentWordIndex = data.currentWordIndex
+      
+      // 全単語完了チェック
+      if (data.currentWordIndex >= room.wordList.length) {
+        participant.finished = true
+        participant.finishTime = Date.now()
+        participant.progress = 100
+      } else {
+        participant.progress = (data.currentWordIndex / room.wordList.length) * 100
+      }
+
+      // Broadcast updated participants to all in room
+      io.to(data.pin).emit('participant-update', {
+        participants: Array.from(room.participants.values())
+      })
+    })
+
+    // タイピング統計更新イベント
+    socket.on('update-typing-stats', (data) => {
+      const room = rooms.get(data.pin)
+      
+      if (!room || !room.participants.has(socket.id)) {
+        return
+      }
+
+      const participant = room.participants.get(socket.id)
+      
+      // 統計データを更新
+      if (data.typingStats) {
+        participant.typingStats = {
+          ...participant.typingStats,
+          ...data.typingStats
+        }
+        
+        // WPMと正確性を再計算
+        const { totalKeystrokes, errorCount, correctKeystrokes, startTime } = participant.typingStats
+        
+        if (startTime && totalKeystrokes > 0) {
+          const elapsedMinutes = (Date.now() - startTime) / (1000 * 60)
+          participant.wpm = elapsedMinutes > 0 ? (correctKeystrokes / 5) / elapsedMinutes : 0
+          participant.accuracy = (correctKeystrokes / totalKeystrokes) * 100
+        }
+      }
+
+      // 通常の進捗更新も処理
+      if (data.progress !== undefined) {
+        participant.progress = data.progress
+      }
+      
+      // 単語統計を追加
+      if (data.wordStats) {
+        participant.typingStats.wordStats = data.wordStats
+      }
+
+      // 完了チェック
+      if (data.progress >= 100 && !participant.finished) {
+        participant.finished = true
+        participant.finishTime = Date.now()
+      }
+
+      // 全参加者に更新を通知
       io.to(data.pin).emit('participant-update', {
         participants: Array.from(room.participants.values())
       })

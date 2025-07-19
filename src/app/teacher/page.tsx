@@ -19,6 +19,7 @@ function TeacherPageContent() {
   const [difficulty, setDifficulty] = useState<'easy' | 'medium' | 'hard'>('easy')
   const [customText, setCustomText] = useState('')
   const [useCustomText, setUseCustomText] = useState(false)
+  const [mode, setMode] = useState<'sentence' | 'word'>('word') // デフォルトを単語モードに
 
   useEffect(() => {
     if (!teacherName) {
@@ -51,11 +52,21 @@ function TeacherPageContent() {
 
   const handleStartRace = () => {
     if (room && participants.length > 0) {
-      const text = useCustomText && customText.trim() 
-        ? customText.trim()
-        : getDefaultText(textType, difficulty)
+      const raceOptions: any = {
+        mode,
+        textType,
+        difficulty,
+        customText: useCustomText ? customText.trim() : undefined
+      }
       
-      socketService.startRace(room.id, text, textType)
+      if (mode === 'sentence') {
+        const text = useCustomText && customText.trim() 
+          ? customText.trim()
+          : getDefaultText(textType, difficulty)
+        raceOptions.text = text
+      }
+      
+      socketService.startRace(room.id, raceOptions)
       setRaceStarted(true)
     }
   }
@@ -174,6 +185,20 @@ function TeacherPageContent() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
+                  タイピングモード
+                </label>
+                <select
+                  value={mode}
+                  onChange={(e) => setMode(e.target.value as 'sentence' | 'word')}
+                  className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="word">単語モード（寿司打風）</option>
+                  <option value="sentence">文章モード</option>
+                </select>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
                   入力方式
                 </label>
                 <select
@@ -186,7 +211,9 @@ function TeacherPageContent() {
                   <option value="romaji">ローマ字（Romaji）</option>
                 </select>
               </div>
-              
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   難易度
@@ -195,43 +222,50 @@ function TeacherPageContent() {
                   value={difficulty}
                   onChange={(e) => setDifficulty(e.target.value as 'easy' | 'medium' | 'hard')}
                   className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  disabled={useCustomText}
+                  disabled={useCustomText && mode === 'sentence'}
                 >
-                  <option value="easy">初級（簡単な文章）</option>
-                  <option value="medium">中級（句読点あり）</option>
-                  <option value="hard">上級（記号・数字あり）</option>
+                  <option value="easy">初級（簡単な{mode === 'word' ? '単語' : '文章'}）</option>
+                  <option value="medium">中級（{mode === 'word' ? '中程度の単語' : '句読点あり'}）</option>
+                  <option value="hard">上級（{mode === 'word' ? '複雑な単語' : '記号・数字あり'}）</option>
                 </select>
+              </div>
+              
+              <div>
+                <div className="flex items-center mb-2">
+                  <input
+                    type="checkbox"
+                    id="useCustomText"
+                    checked={useCustomText}
+                    onChange={(e) => setUseCustomText(e.target.checked)}
+                    className="mr-2"
+                    disabled={mode === 'word'}
+                  />
+                  <label htmlFor="useCustomText" className="text-sm font-medium text-gray-700">
+                    カスタム問題文を使用 {mode === 'word' && '(単語モードでは無効)'}
+                  </label>
+                </div>
               </div>
             </div>
             
-            <div className="mt-4">
-              <div className="flex items-center mb-2">
-                <input
-                  type="checkbox"
-                  id="useCustomText"
-                  checked={useCustomText}
-                  onChange={(e) => setUseCustomText(e.target.checked)}
-                  className="mr-2"
-                />
-                <label htmlFor="useCustomText" className="text-sm font-medium text-gray-700">
-                  カスタム問題文を使用
-                </label>
-              </div>
-              {useCustomText && (
+            {useCustomText && mode === 'sentence' && (
+              <div className="mt-4">
                 <textarea
                   value={customText}
                   onChange={(e) => setCustomText(e.target.value)}
                   placeholder="ここに問題文を入力してください..."
                   className="w-full p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 h-20"
                 />
-              )}
-            </div>
+              </div>
+            )}
             
             {!useCustomText && (
               <div className="mt-4 p-3 bg-gray-50 rounded-md">
                 <h3 className="text-sm font-medium text-gray-700 mb-2">プレビュー:</h3>
                 <p className="text-sm text-gray-600">
-                  {getDefaultText(textType, difficulty)}
+                  {mode === 'word' 
+                    ? `${textType}の${difficulty}レベルの単語を20個出題します`
+                    : getDefaultText(textType, difficulty)
+                  }
                 </p>
               </div>
             )}

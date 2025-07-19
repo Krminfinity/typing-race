@@ -8,6 +8,7 @@ export interface Participant {
   accuracy: number
   finished: boolean
   finishTime?: number
+  currentWordIndex?: number
 }
 
 export interface Room {
@@ -17,6 +18,9 @@ export interface Room {
   status: 'waiting' | 'active' | 'finished'
   participants: Participant[]
   startTime?: number
+  mode?: 'sentence' | 'word'
+  wordList?: Array<{ hiragana?: string, word?: string, romaji: string[] }>
+  currentWordIndex?: number
 }
 
 class SocketService {
@@ -71,17 +75,40 @@ class SocketService {
     }
   }
 
-  startRace(pin: string, text?: string, textType?: string) {
+  startRace(pin: string, options: {
+    text?: string
+    textType?: string
+    mode?: 'sentence' | 'word'
+    difficulty?: string
+    customText?: string
+  }) {
     if (!this.socket) return
-    this.socket.emit('start-race', { pin, text, textType })
+    this.socket.emit('start-race', { pin, ...options })
   }
 
-  updateProgress(pin: string, progress: number, wpm: number, accuracy: number) {
+  updateTypingStats(pin: string, progress: number, typingStats: any, wordStats?: any) {
     if (!this.socket) return
-    this.socket.emit('update-progress', { pin, progress, wpm, accuracy })
+    this.socket.emit('update-typing-stats', { pin, progress, typingStats, wordStats })
   }
 
-  onRaceStarted(callback: (data: { text: string, startTime: number, textType?: string }) => void) {
+  updateProgress(pin: string, progress: number, wpm: number, accuracy: number, currentWordIndex?: number) {
+    if (!this.socket) return
+    this.socket.emit('update-progress', { pin, progress, wpm, accuracy, currentWordIndex })
+  }
+
+  wordCompleted(pin: string, currentWordIndex: number) {
+    if (!this.socket) return
+    this.socket.emit('word-completed', { pin, currentWordIndex })
+  }
+
+  onRaceStarted(callback: (data: { 
+    text?: string
+    startTime: number
+    textType?: string
+    mode?: 'sentence' | 'word'
+    wordList?: Array<{ hiragana?: string, word?: string, romaji: string[] }>
+    fixedRomajiPatterns?: string[]
+  }) => void) {
     if (!this.socket) return
     this.socket.on('race-started', callback)
   }
