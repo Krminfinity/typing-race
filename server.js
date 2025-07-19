@@ -195,6 +195,7 @@ app.prepare().then(() => {
         wpm: 0,
         accuracy: 100,
         finished: false,
+        finishTime: null,
         currentWordIndex: 0,
         fixedRomajiPatterns: [], // 生徒固有のローマ字パターンを保存
         typingStats: {
@@ -202,6 +203,10 @@ app.prepare().then(() => {
           errorCount: 0,
           correctKeystrokes: 0,
           startTime: null,
+          endTime: null,
+          finalAccuracy: 100,
+          finalWPM: 0,
+          finalErrorCount: 0,
           wordStats: [] // 各単語の詳細統計
         }
       }
@@ -231,7 +236,10 @@ app.prepare().then(() => {
         return
       }
 
+      console.log(`Starting race in room ${data.pin} with mode: ${data.mode}`)
+
       let raceData = {}
+      let selectedWords = null
 
       // 単語モードかどうかを判定
       if (data.mode === 'word') {
@@ -241,7 +249,7 @@ app.prepare().then(() => {
         
         // ランダムに20個の単語を選択
         const shuffled = [...wordList].sort(() => 0.5 - Math.random())
-        const selectedWords = shuffled.slice(0, 20)
+        selectedWords = shuffled.slice(0, 20)
         
         room.wordList = selectedWords
         room.currentWordIndex = 0
@@ -254,6 +262,8 @@ app.prepare().then(() => {
           textType: data.textType,
           fixedRomajiPatterns: selectedWords.map(word => word.romaji[0]) // 固定パターンも送信
         }
+        
+        console.log(`Word mode: selected ${selectedWords.length} words`)
       } else {
         // 通常の文章モード
         let raceText = room.text
@@ -273,6 +283,8 @@ app.prepare().then(() => {
           startTime: Date.now(),
           textType: data.textType
         }
+        
+        console.log(`Sentence mode: text set to "${raceText.substring(0, 50)}..."`)
       }
 
       room.status = 'active'
@@ -289,7 +301,7 @@ app.prepare().then(() => {
         participant.finished = false
         
         // 単語モードの場合、各参加者に固定のローマ字パターンを設定
-        if (data.mode === 'word' && data.textType === 'japanese') {
+        if (data.mode === 'word' && data.textType === 'japanese' && selectedWords) {
           participant.fixedRomajiPatterns = selectedWords.map(word => {
             // 各単語の最短ローマ字パターンを生成
             return word.romaji[0] // 最初のパターンを固定パターンとして使用
@@ -297,6 +309,14 @@ app.prepare().then(() => {
         } else {
           participant.fixedRomajiPatterns = []
         }
+      })
+      
+      console.log(`Emitting race-started to room ${data.pin} with data:`, {
+        mode: raceData.mode,
+        hasText: !!raceData.text,
+        hasWordList: !!raceData.wordList,
+        wordListLength: raceData.wordList ? raceData.wordList.length : 0,
+        textType: raceData.textType
       })
       
       io.to(data.pin).emit('race-started', raceData)
@@ -359,7 +379,80 @@ app.prepare().then(() => {
       })
     })
 
-    // タイピング統計更新イベント
+    // 詳細タイピング統計更新イベント（新システム）
+    socket.on('update-detailed-stats', (data) => {
+      const room = rooms.get(data.pin)
+      
+      if (!room || !room.participants.has(socket.id)) {
+        return
+      }
+
+      const participant = room.participants.get(socket.id)
+      
+      // 詳細統計を更新
+      if (data.stats) {
+        console.log(`Updating stats for ${participant.name}:`, {
+          before: {
+            totalKeystrokes: participant.typingStats.totalKeystrokes,
+            errorCount: participant.typingStats.errorCount,
+            correctKeystrokes: participant.typingStats.correctKeystrokes
+          },
+          incoming: {
+            totalKeystrokes: data.stats.totalKeystrokes,
+            errorCount: data.stats.errorCount,
+            correctKeystrokes: data.stats.correctKeystrokes
+          }
+        })
+        
+        // 統計は累積的に更新（減らない）
+        participant.typingStats.totalKeystrokes = Math.max(
+          participant.typingStats.totalKeystrokes || 0, 
+          data.stats.totalKeystrokes || 0
+        )
+        participant.typingStats.errorCount = Math.max(
+          participant.typingStats.errorCount || 0,
+          data.stats.errorCount || 0
+        )
+        participant.typingStats.correctKeystrokes = Math.max(
+          participant.typingStats.correctKeystrokes || 0,
+          data.stats.correctKeystrokes || 0
+        )
+        
+        participant.accuracy = data.stats.accuracy || 100
+        participant.wpm = data.stats.wpm || 0
+        
+        console.log(`After update for ${participant.name}:`, {
+          totalKeystrokes: participant.typingStats.totalKeystrokes,
+          errorCount: participant.typingStats.errorCount,
+          correctKeystrokes: participant.typingStats.correctKeystrokes
+        })
+        
+        // 完了時の最終統計を記録
+        if (data.stats.finished) {
+          participant.finished = true
+          participant.finishTime = Date.now()
+          participant.progress = 100
+          participant.typingStats.endTime = Date.now()
+          participant.typingStats.finalAccuracy = data.stats.accuracy
+          participant.typingStats.finalWPM = data.stats.wpm
+          participant.typingStats.finalErrorCount = data.stats.errorCount
+          participant.typingStats.finalTotalKeystrokes = data.stats.totalKeystrokes
+          participant.typingStats.finalCorrectKeystrokes = data.stats.correctKeystrokes
+        }
+      }
+      
+      // 進捗更新
+      if (data.progress !== undefined) {
+        participant.progress = data.progress
+      }
+
+      // Broadcast updated participants to all in room
+      io.to(data.pin).emit('participant-update', {
+        participants: Array.from(room.participants.values())
+      })
+    })
+
+    // タイピング統計更新イベント（レガシー）
     socket.on('update-typing-stats', (data) => {
       const room = rooms.get(data.pin)
       
@@ -403,6 +496,53 @@ app.prepare().then(() => {
       }
 
       // 全参加者に更新を通知
+      io.to(data.pin).emit('participant-update', {
+        participants: Array.from(room.participants.values())
+      })
+    })
+
+    // レースリセット機能
+    socket.on('reset-race', (data) => {
+      const room = rooms.get(data.pin)
+      
+      if (!room || room.teacherId !== socket.id) {
+        socket.emit('error', { message: 'レースをリセットする権限がありません' })
+        return
+      }
+
+      console.log(`Resetting race for room ${data.pin}`)
+      
+      // ルームの状態をリセット
+      room.status = 'waiting'
+      
+      // 全参加者の統計をリセット
+      for (const participant of room.participants.values()) {
+        participant.progress = 0
+        participant.wpm = 0
+        participant.accuracy = 100
+        participant.finished = false
+        participant.finishTime = null
+        participant.typingStats = {
+          totalKeystrokes: 0,
+          errorCount: 0,
+          correctKeystrokes: 0,
+          startTime: null,
+          endTime: null,
+          accuracy: 100,
+          wpm: 0,
+          finalAccuracy: 100,
+          finalWPM: 0,
+          finalErrorCount: 0,
+          finalTotalKeystrokes: 0,
+          finalCorrectKeystrokes: 0,
+          wordStats: []
+        }
+      }
+
+      // 全参加者にリセット通知
+      io.to(data.pin).emit('race-reset')
+      
+      // 更新された参加者情報を送信
       io.to(data.pin).emit('participant-update', {
         participants: Array.from(room.participants.values())
       })

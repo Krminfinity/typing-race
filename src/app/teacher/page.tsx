@@ -52,6 +52,8 @@ function TeacherPageContent() {
 
   const handleStartRace = () => {
     if (room && participants.length > 0) {
+      console.log('Starting race with options:', { mode, textType, difficulty, useCustomText, customText: customText.substring(0, 30) + '...' })
+      
       const raceOptions: any = {
         mode,
         textType,
@@ -64,10 +66,27 @@ function TeacherPageContent() {
           ? customText.trim()
           : getDefaultText(textType, difficulty)
         raceOptions.text = text
+        console.log('Sentence mode text:', text.substring(0, 50) + '...')
+      } else {
+        console.log('Word mode selected')
       }
       
       socketService.startRace(room.id, raceOptions)
       setRaceStarted(true)
+    } else {
+      console.log('Cannot start race: room or participants missing', { roomExists: !!room, participantCount: participants.length })
+    }
+  }
+
+  const handleRestartRace = () => {
+    if (room) {
+      // レース状態をリセット
+      setRaceStarted(false)
+      
+      // サーバーにリセット指示を送信
+      socketService.resetRace(room.id)
+      
+      console.log('Race reset for room:', room.id)
     }
   }
 
@@ -166,12 +185,69 @@ function TeacherPageContent() {
                   </p>
                 )}
                 {raceStarted && (
-                  <p className="text-green-600 font-semibold">
-                    競争進行中！
-                  </p>
+                  <div className="space-y-2">
+                    <p className="text-green-600 font-semibold">
+                      競争進行中！
+                    </p>
+                    <button
+                      onClick={handleRestartRace}
+                      className="w-full bg-orange-500 hover:bg-orange-600 text-white font-semibold py-2 px-4 rounded-lg transition duration-200"
+                    >
+                      競争をリセット（再開始）
+                    </button>
+                  </div>
                 )}
               </div>
             </div>
+          </div>
+        </div>
+
+        {/* 入力制限機能の案内セクション */}
+        <div className="bg-white rounded-xl shadow-xl p-6 mb-6">
+          <h2 className="text-xl font-semibold text-gray-800 mb-4">
+            💻 自動入力制限機能
+          </h2>
+          
+          <div className="bg-green-50 p-4 rounded-lg mb-4">
+            <div className="flex items-center space-x-2 mb-2">
+              <span className="text-green-600 font-bold text-xl">✅</span>
+              <h3 className="font-bold text-green-800">設定不要で自動適用</h3>
+            </div>
+            <p className="text-green-800 text-sm">
+              生徒がタイピングエリアにカーソルを合わせると、自動的に半角英数字のみ入力可能になります。
+              <br />
+              PC設定の変更やソフトウェアのインストールは一切不要です。
+            </p>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="bg-blue-50 p-4 rounded-lg">
+              <h3 className="font-bold text-blue-800 mb-2">� 自動制限機能</h3>
+              <ul className="text-sm text-blue-700 space-y-1">
+                <li>• 日本語入力（IME）の自動無効化</li>
+                <li>• 半角英数字以外のキー入力をブロック</li>
+                <li>• 全角文字の貼り付けを自動変換</li>
+                <li>• リアルタイムでの入力値検証</li>
+              </ul>
+            </div>
+            
+            <div className="bg-purple-50 p-4 rounded-lg">
+              <h3 className="font-bold text-purple-800 mb-2">🎯 効果</h3>
+              <ul className="text-sm text-purple-700 space-y-1">
+                <li>• 誤った入力モード切り替えを完全防止</li>
+                <li>• タイピング競争に集中できる環境</li>
+                <li>• 管理者権限や設定変更不要</li>
+                <li>• どのWindowsPCでも即座に動作</li>
+              </ul>
+            </div>
+          </div>
+          
+          <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+            <p className="text-yellow-800 text-sm">
+              <strong>💡 使用方法:</strong> 
+              生徒には「タイピングエリアをクリックするだけ」と伝えてください。
+              特別な設定や操作は必要ありません。
+            </p>
           </div>
         </div>
 
@@ -279,9 +355,24 @@ function TeacherPageContent() {
         )}
 
         <div className="bg-white rounded-xl shadow-xl p-6">
-          <h2 className="text-xl font-semibold text-gray-800 mb-4">
-            参加者一覧 ({participants.length}人)
-          </h2>
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-xl font-semibold text-gray-800">
+              参加者一覧 ({participants.length}人)
+            </h2>
+            {raceStarted && participants.length > 0 && (
+              <div className="flex space-x-4 text-sm">
+                <span className="text-gray-600">
+                  完了者: {participants.filter(p => p.finished).length}人
+                </span>
+                <span className="text-gray-600">
+                  平均速度: {Math.round(participants.reduce((sum, p) => sum + p.wpm, 0) / Math.max(participants.length, 1))} WPM
+                </span>
+                <span className="text-gray-600">
+                  平均正確性: {Math.round(participants.reduce((sum, p) => sum + p.accuracy, 0) / Math.max(participants.length, 1))}%
+                </span>
+              </div>
+            )}
+          </div>
           
           {participants.length === 0 ? (
             <div className="text-center py-8">
@@ -300,6 +391,8 @@ function TeacherPageContent() {
                     <th className="px-4 py-2 text-left">進捗</th>
                     <th className="px-4 py-2 text-left">速度 (WPM)</th>
                     <th className="px-4 py-2 text-left">正確性</th>
+                    <th className="px-4 py-2 text-left">ミス数</th>
+                    <th className="px-4 py-2 text-left">タイプ数</th>
                     <th className="px-4 py-2 text-left">状態</th>
                   </tr>
                 </thead>
@@ -337,6 +430,16 @@ function TeacherPageContent() {
                       </td>
                       <td className="px-4 py-2">{Math.round(participant.wpm)}</td>
                       <td className="px-4 py-2">{Math.round(participant.accuracy)}%</td>
+                      <td className="px-4 py-2">
+                        <span className="text-red-600 font-semibold">
+                          {participant.typingStats?.errorCount || 0}
+                        </span>
+                      </td>
+                      <td className="px-4 py-2">
+                        <span className="text-blue-600">
+                          {participant.typingStats?.totalKeystrokes || 0}
+                        </span>
+                      </td>
                       <td className="px-4 py-2">
                         <span className={`px-2 py-1 rounded-full text-xs ${
                           participant.finished ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800'

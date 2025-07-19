@@ -5,6 +5,52 @@
   --foreground: #171717;
 }
 
+/* IME無効化用のCSSクラス */
+.ime-disabled {
+  ime-mode: disabled !important;
+  -webkit-ime-mode: disabled !important;
+  -moz-ime-mode: disabled !important;
+  -ms-ime-mode: disabled !important;
+  
+  /* 追加の制御 */
+  -webkit-user-modify: read-write-plaintext-only !important;
+  -webkit-text-security: none !important;
+  
+  /* 入力方式の制御 */
+  input-mode: latin !important;
+  
+  /* 自動補完・修正の無効化 */
+  autocomplete: off !important;
+  autocorrect: off !important;
+  autocapitalize: off !important;
+  spellcheck: false !important;
+}
+
+/* タイピング入力エリア専用のスタイル */
+.typing-input {
+  ime-mode: disabled !important;
+  -webkit-ime-mode: disabled !important;
+  -moz-ime-mode: disabled !important;
+  -ms-ime-mode: disabled !important;
+  
+  /* ブラウザ固有の入力制御 */
+  -webkit-user-modify: read-write-plaintext-only !important;
+  -webkit-composition: none !important;
+  
+  /* 入力方式の明示的な指定 */
+  input-mode: latin !important;
+  
+  /* 各種自動機能の無効化 */
+  autocomplete: off !important;
+  autocorrect: off !important;
+  autocapitalize: off !important;
+  spellcheck: false !important;
+  
+  /* フォントの指定（半角文字の表示を最適化） */
+  font-family: 'Courier New', 'Monaco', 'Menlo', monospace !important;
+  font-variant-numeric: tabular-nums !important;
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);

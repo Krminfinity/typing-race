@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, Suspense, useRef } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { socketService, Room, Participant } from '@/lib/socket'
-import { validateRomajiInput, calculateRomajiProgress, convertToRomajiPatterns, getShortestRomajiPattern, validateFixedRomajiInput, RomajiStyle, convertToRomaji, initializeWordStats, updateWordStats, WordTypingStats } from '@/lib/romaji'
+import { validateRomajiInputWithPatterns, calculateRomajiProgress, AccurateTypingStats, convertToRomaji, analyzeTypingProgress } from '@/lib/romaji'
 import { 
   disableIME, 
   enableIME, 
@@ -11,8 +11,11 @@ import {
   convertToHalfWidth,
   filterKeyboardInput,
   IMEMonitor,
+  createUltimateInputRestriction,
+  createAutoHalfWidthSwitcher,
   type IMEState
 } from '@/lib/ime-control'
+import TypingDisplay from '@/components/TypingDisplay'
 
 function StudentPageContent() {
   const searchParams = useSearchParams()
@@ -26,16 +29,6 @@ function StudentPageContent() {
   const [raceMode, setRaceMode] = useState<'sentence' | 'word'>('sentence')
   const [wordList, setWordList] = useState<Array<{ hiragana?: string, word?: string, romaji: string[] }>>([])
   const [currentWordIndex, setCurrentWordIndex] = useState(0)
-  const [fixedRomajiPatterns, setFixedRomajiPatterns] = useState<string[]>([])
-  const [romajiStyle, setRomajiStyle] = useState<RomajiStyle>(RomajiStyle.HEPBURN)
-  const [currentWordStats, setCurrentWordStats] = useState<WordTypingStats | null>(null)
-  const [allWordStats, setAllWordStats] = useState<WordTypingStats[]>([])
-  const [globalTypingStats, setGlobalTypingStats] = useState({
-    totalKeystrokes: 0,
-    errorCount: 0,
-    correctKeystrokes: 0,
-    startTime: null as number | null
-  })
   const [textType, setTextType] = useState<string>('')
   const [userInput, setUserInput] = useState('')
   const [raceStarted, setRaceStarted] = useState(false)
@@ -43,11 +36,21 @@ function StudentPageContent() {
   const [error, setError] = useState('')
   const [startTime, setStartTime] = useState<number | null>(null)
 
+  // 新しいタイピング統計システム
+  const [typingStats, setTypingStats] = useState<AccurateTypingStats | null>(null)
+  const [lastKeyPressed, setLastKeyPressed] = useState<string>('')
+  const [currentAccuracy, setCurrentAccuracy] = useState<number>(100)
+  const [currentWPM, setCurrentWPM] = useState<number>(0)
+  
   // IME制御用の状態
   const [imeState, setImeState] = useState<IMEState>({ isActive: false, composing: false })
-  const [imeWarning, setImeWarning] = useState<string>('')
-  const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const [inputRestricted, setInputRestricted] = useState<boolean>(false)
+  const [showInputHelp, setShowInputHelp] = useState<boolean>(false)
+  const [inputModeDetected, setInputModeDetected] = useState<string>('半角英数')
+  const pageRef = useRef<HTMLDivElement>(null)
   const imeMonitorRef = useRef<IMEMonitor | null>(null)
+  const ultimateRestrictionCleanupRef = useRef<(() => void) | null>(null)
+  const autoSwitcherCleanupRef = useRef<(() => void) | null>(null)
 
   // Calculate typing statistics with romaji support
   const calculateStats = useCallback(() => {
@@ -66,18 +69,17 @@ function StudentPageContent() {
           const currentWord = wordList[currentWordIndex]
           const targetText = currentWord.hiragana || currentWord.word || ''
           
-          if (textType === 'japanese' || targetText.match(/[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]/)) {
-            // 固定パターンを使用
-            const fixedPattern = fixedRomajiPatterns[currentWordIndex]
-            if (fixedPattern) {
-              const validation = validateFixedRomajiInput(targetText, userInput, romajiStyle)
-              accuracy = userInput.length > 0 ? (validation.correctLength / userInput.length) * 100 : 100
-            } else {
-              // フォールバック: 通常の検証
-              const validation = validateRomajiInput(targetText, userInput)
-              accuracy = userInput.length > 0 ? (validation.correctLength / userInput.length) * 100 : 100
+          if (textType === 'japanese' || (targetText && targetText.match(/[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]/))) {
+            // 日本語の場合、ローマ字検証を使用
+            const validation = validateRomajiInputWithPatterns(targetText, userInput)
+            if (validation.isComplete) {
+              // 現在の単語が完了している場合
+              accuracy = 100
+            } else if (userInput.length > 0) {
+              accuracy = (validation.correctLength / userInput.length) * 100
             }
           } else {
+            // 英語やローマ字の場合
             let correctChars = 0
             for (let i = 0; i < userInput.length; i++) {
               if (userInput[i] === targetText[i]) {
@@ -90,19 +92,14 @@ function StudentPageContent() {
       }
     } else {
       // 文章モードの統計計算
-      if (!raceText) return { progress: 0, wpm: 0, accuracy: 100 }
-      
-      // 日本語の場合はローマ字で判定
       if (textType === 'japanese' || (!textType && /[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]/.test(raceText))) {
-        const romajiProgress = calculateRomajiProgress(raceText, userInput)
-        progress = romajiProgress.progress
-        
-        const validation = validateRomajiInput(raceText, userInput)
+        const validation = validateRomajiInputWithPatterns(raceText, userInput)
+        const romajiExpected = convertToRomaji(raceText)
+        progress = raceText.length > 0 ? (validation.correctLength / romajiExpected.length) * 100 : 0
         accuracy = userInput.length > 0 ? (validation.correctLength / userInput.length) * 100 : 100
       } else {
-        // 英語やローマ字の場合は通常の文字比較
-        progress = Math.min((userInput.length / raceText.length) * 100, 100)
-        
+        // 英語やローマ字テキストの場合
+        progress = raceText.length > 0 ? (userInput.length / raceText.length) * 100 : 0
         let correctChars = 0
         for (let i = 0; i < userInput.length; i++) {
           if (userInput[i] === raceText[i]) {
@@ -119,7 +116,7 @@ function StudentPageContent() {
     const wpm = timeElapsed > 0 ? wordsTyped / timeElapsed : 0
     
     return { progress, wpm, accuracy }
-  }, [userInput, raceText, raceMode, wordList, currentWordIndex, startTime, textType, fixedRomajiPatterns])
+  }, [userInput, raceText, raceMode, wordList, currentWordIndex, startTime, textType])
 
   useEffect(() => {
     if (!pin || !studentName) {
@@ -137,48 +134,47 @@ function StudentPageContent() {
 
     // Listen for race start
     socketService.onRaceStarted((data) => {
+      console.log('Race started event received:', data)
       setRaceMode(data.mode || 'sentence')
       setTextType(data.textType || '')
       setRaceStarted(true)
+      setRaceFinished(false)
       setStartTime(data.startTime)
+      setUserInput('')
+      setCurrentWordIndex(0)
+      
+      // 新しいタイピング統計を初期化
+      setTypingStats(new AccurateTypingStats())
+      setCurrentAccuracy(100)
+      setCurrentWPM(0)
       
       if (data.mode === 'word' && data.wordList) {
+        console.log('Setting up word mode with', data.wordList.length, 'words')
         setWordList(data.wordList)
         setCurrentWordIndex(0)
         setRaceText('')
-        
-        // 固定ローマ字パターンを設定
-        if (data.fixedRomajiPatterns) {
-          setFixedRomajiPatterns(data.fixedRomajiPatterns)
-        } else {
-          // パターンが送られてこない場合は最短パターンを生成
-          const patterns = data.wordList.map((word: any) => 
-            word.hiragana ? getShortestRomajiPattern(word.hiragana) : word.word
-          )
-          setFixedRomajiPatterns(patterns)
-        }
-        
-        // 統計の初期化
-        setGlobalTypingStats({
-          totalKeystrokes: 0,
-          errorCount: 0,
-          correctKeystrokes: 0,
-          startTime: Date.now()
-        })
-        setAllWordStats([])
-        
-        // 最初の単語の統計を初期化
-        if (data.wordList.length > 0) {
-          const firstWordText = data.wordList[0].hiragana || data.wordList[0].word || ''
-          const expectedInput = convertToRomaji(firstWordText, romajiStyle)
-          setCurrentWordStats(initializeWordStats(0, expectedInput))
-        }
       } else {
+        console.log('Setting up sentence mode with text:', data.text?.substring(0, 50) + '...')
         setRaceText(data.text || '')
         setWordList([])
         setCurrentWordIndex(0)
-        setFixedRomajiPatterns([])
       }
+    })
+
+    // Listen for race reset
+    socketService.onRaceReset(() => {
+      console.log('Race reset event received')
+      setRaceStarted(false)
+      setRaceFinished(false)
+      setUserInput('')
+      setCurrentWordIndex(0)
+      setRaceText('')
+      setWordList([])
+      setStartTime(null)
+      setTypingStats(null)
+      setCurrentAccuracy(100)
+      setCurrentWPM(0)
+      setError('')
     })
 
     // Listen for participant updates
@@ -203,29 +199,87 @@ function StudentPageContent() {
     }
   }, [pin, studentName, router])
 
-  // IME制御の初期化
+  // ページ全体でのキーボード入力を受け取る
   useEffect(() => {
-    if (textareaRef.current) {
-      // IMEを無効化
-      disableIME(textareaRef.current)
+    if (!raceStarted || raceFinished) return
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // システムキーやショートカットキーを除外
+      if (e.ctrlKey || e.altKey || e.metaKey) return
+      if (e.key === 'F5' || e.key === 'F12') return
+      if (e.key === 'Tab' || e.key === 'Escape') return
       
-      // IME監視を開始
-      imeMonitorRef.current = new IMEMonitor(textareaRef.current, (state: IMEState) => {
+      e.preventDefault()
+      
+      // IME制御機能を併用
+      const filtered = filterKeyboardInput(e)
+      if (!filtered) {
+        return
+      }
+      
+      // 日本語入力を検出して警告
+      const japaneseDetection = detectJapaneseInput(e)
+      if (japaneseDetection.hasJapanese) {
+        console.warn('Japanese input detected and blocked')
+        return
+      }
+
+      // Backspaceの処理
+      if (e.key === 'Backspace') {
+        if (userInput.length > 0) {
+          setUserInput(prev => prev.slice(0, -1))
+        }
+        return
+      }
+
+      // 通常の文字入力の処理
+      if (e.key.length === 1) {
+        const newChar = e.key
+        const newInput = userInput + newChar
+        
+        handleInputChange(newInput)
+      }
+    }
+
+    // ページ全体にイベントリスナーを追加
+    document.addEventListener('keydown', handleKeyDown)
+    
+    // フォーカスを確実にページに当てる
+    if (pageRef.current) {
+      pageRef.current.focus()
+    }
+
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [raceStarted, raceFinished, userInput])
+
+  // 究極の入力制限システムの初期化（ページ全体に適用）
+  useEffect(() => {
+    if (raceStarted && pageRef.current) {
+      // IME監視（状態表示用）
+      imeMonitorRef.current = new IMEMonitor(document.body, (state: IMEState) => {
         setImeState(state)
-        if (state.isActive || state.composing) {
-          setImeWarning('日本語入力モードが検出されました。ローマ字入力に切り替えてください。')
+        setInputRestricted(state.isActive || state.composing)
+        
+        // 入力モードを検出して表示
+        if (state.isActive) {
+          setInputModeDetected('日本語入力')
+          setShowInputHelp(true)
         } else {
-          setImeWarning('')
+          setInputModeDetected('半角英数')
+          setShowInputHelp(false)
         }
       })
       
+      // 入力制限が有効であることを表示
+      setInputRestricted(true)
+      
       return () => {
-        if (textareaRef.current) {
-          enableIME(textareaRef.current)
-        }
         if (imeMonitorRef.current) {
           imeMonitorRef.current.destroy()
         }
+        setInputRestricted(false)
       }
     }
   }, [raceStarted])
@@ -240,210 +294,126 @@ function StudentPageContent() {
         socketService.updateTypingStats(
           room.id, 
           stats.progress, 
-          globalTypingStats,
-          allWordStats
+          {},
+          []
         )
       } else {
         socketService.updateProgress(room.id, stats.progress, stats.wpm, stats.accuracy)
       }
-      
-      // Check if finished
-      if (stats.progress >= 100 && !raceFinished) {
-        setRaceFinished(true)
-      }
     }
-  }, [userInput, raceStarted, startTime, room, calculateStats, raceFinished, raceMode, currentWordIndex, globalTypingStats, allWordStats])
+  }, [userInput, room, calculateStats, raceStarted, startTime, raceMode])
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+  const handleInputChange = (newInput: string) => {
     if (!raceStarted || raceFinished) return
     
-    let value = e.target.value
+    setLastKeyPressed(newInput[newInput.length - 1] || '')
     
-    // 日本語入力の検出と変換
-    const detection = detectJapaneseInput(value)
-    if (detection.hasJapanese) {
-      setImeWarning(detection.message || '')
-      // 全角文字を半角に変換を試行
-      value = convertToHalfWidth(value)
-      // 変換後も日本語文字が残っている場合は入力を拒否
-      const secondCheck = detectJapaneseInput(value)
-      if (secondCheck.hasJapanese) {
-        // 入力を元に戻す（日本語文字を除去）
-        value = userInput
-        return
-      }
-    } else {
-      setImeWarning('')
-    }
+    // 常に入力を受け入れる（ミスも含めて表示するため）
+    setUserInput(newInput)
     
     if (raceMode === 'word') {
-      // 単語モードの処理
+      // 単語モード処理
       if (currentWordIndex >= wordList.length) return
       
       const currentWord = wordList[currentWordIndex]
       const targetText = currentWord.hiragana || currentWord.word || ''
       
-      // 日本語の場合はローマ字で判定
-      if (textType === 'japanese' || targetText.match(/[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]/)) {
-        // 固定パターンを使用
-        const fixedPattern = fixedRomajiPatterns[currentWordIndex]
-        if (fixedPattern) {
-          const validation = validateFixedRomajiInput(targetText, value, romajiStyle)
+      if (textType === 'japanese' || (targetText && targetText.match(/[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]/))) {
+        // 日本語単語の場合、ローマ字検証を使用
+        const validation = validateRomajiInputWithPatterns(targetText, newInput)
+        
+        // 詳細統計の更新（ミスも含めて）
+        if (typingStats && room) {
+          const stats = typingStats.updateWithKeyInput(targetText, newInput, lastKeyPressed)
+          setCurrentAccuracy(stats.accuracy)
+          setCurrentWPM(stats.wpm)
           
-          if (validation.isValid) {
-            setUserInput(value)
-            
-            // 統計更新
-            if (currentWordStats) {
-              const isError = validation.errorPositions.length > 0
-              const updatedStats = updateWordStats(currentWordStats, value, isError)
-              setCurrentWordStats(updatedStats)
-              
-              // グローバル統計更新
-              setGlobalTypingStats(prev => ({
-                ...prev,
-                totalKeystrokes: prev.totalKeystrokes + 1,
-                errorCount: prev.errorCount + (isError ? 1 : 0),
-                correctKeystrokes: prev.correctKeystrokes + (isError ? 0 : 1)
-              }))
-            }
-            
-            // 単語完了チェック
-            if (validation.isComplete) {
-              // 次の単語へ進む
-              const nextIndex = currentWordIndex + 1
-              setCurrentWordIndex(nextIndex)
-              setUserInput('')
-              
-              // 現在の単語統計を保存
-              if (currentWordStats) {
-                const finalStats = updateWordStats(currentWordStats, value, false)
-                setAllWordStats(prev => [...prev, finalStats])
-              }
-              
-              // 次の単語の統計を初期化
-              if (nextIndex < wordList.length) {
-                const nextWordText = wordList[nextIndex].hiragana || wordList[nextIndex].word || ''
-                const nextExpectedInput = convertToRomaji(nextWordText, romajiStyle)
-                setCurrentWordStats(initializeWordStats(nextIndex, nextExpectedInput))
-              }
-              
-              if (room) {
-                socketService.wordCompleted(room.id, nextIndex)
-              }
-              
-              if (nextIndex >= wordList.length && !raceFinished) {
-                setRaceFinished(true)
-              }
-            }
-          }
-        } else {
-          // フォールバック: 通常の検証（複数パターン対応）
-          const validation = validateRomajiInput(targetText, value)
+          const romajiExpected = convertToRomaji(targetText)
+          const progress = targetText.length > 0 ? (validation.correctLength / romajiExpected.length) * 100 : 0
           
-          if (validation.isValid) {
-            setUserInput(value)
-            
-            // 単語完了チェック
-            const progress = calculateRomajiProgress(targetText, value)
-            if (progress.isComplete) {
-              // 次の単語へ進む
-              const nextIndex = currentWordIndex + 1
-              setCurrentWordIndex(nextIndex)
-              setUserInput('')
-              
-              if (room) {
-                socketService.wordCompleted(room.id, nextIndex)
-              }
-              
-              if (nextIndex >= wordList.length && !raceFinished) {
-                setRaceFinished(true)
-              }
-            }
+          socketService.updateDetailedStats(room.id, {
+            totalKeystrokes: stats.totalKeystrokes,
+            errorCount: stats.errorCount,
+            correctKeystrokes: stats.correctKeystrokes,
+            accuracy: stats.accuracy,
+            wpm: stats.wpm,
+            finished: validation.isComplete
+          }, Math.min(progress, 100))
+        }
+        
+        // 単語完了チェック（正確に入力された場合のみ）
+        if (validation.isComplete) {
+          const nextIndex = currentWordIndex + 1
+          setCurrentWordIndex(nextIndex)
+          setUserInput('')
+          
+          if (nextIndex >= wordList.length && !raceFinished) {
+            setRaceFinished(true)
           }
         }
       } else {
-        // 英語の場合は文字比較
-        let isValid = true
-        for (let i = 0; i < value.length; i++) {
-          if (i >= targetText.length || value[i] !== targetText[i]) {
-            isValid = false
-            break
-          }
+        // 英語やローマ字単語の場合
+        // 詳細統計の更新
+        if (typingStats) {
+          const stats = typingStats.updateWithKeyInput(targetText, newInput, lastKeyPressed)
+          setCurrentAccuracy(stats.accuracy)
+          setCurrentWPM(stats.wpm)
         }
         
-        if (isValid) {
-          setUserInput(value)
+        // 単語完了チェック（正確に入力された場合のみ）
+        if (newInput === targetText) {
+          const nextIndex = currentWordIndex + 1
+          setCurrentWordIndex(nextIndex)
+          setUserInput('')
           
-          // 単語完了チェック
-          if (value === targetText) {
-            // 次の単語へ進む
-            const nextIndex = currentWordIndex + 1
-            setCurrentWordIndex(nextIndex)
-            setUserInput('')
-            
-            if (room) {
-              socketService.wordCompleted(room.id, nextIndex)
-            }
-            
-            if (nextIndex >= wordList.length && !raceFinished) {
-              setRaceFinished(true)
-            }
+          if (nextIndex >= wordList.length && !raceFinished) {
+            setRaceFinished(true)
           }
         }
       }
     } else {
-      // 文章モードの処理（従来通り）
-      // 日本語の場合はローマ字で厳密に判定
+      // 文章モード処理
       if (textType === 'japanese' || (!textType && /[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]/.test(raceText))) {
-        const validation = validateRomajiInput(raceText, value)
+        // 日本語の場合、ローマ字検証を使用
+        const validation = validateRomajiInputWithPatterns(raceText, newInput)
         
-        if (validation.isValid) {
-          setUserInput(value)
+        // 詳細統計の更新（ミスも含めて）
+        if (typingStats && room) {
+          const stats = typingStats.updateWithKeyInput(raceText, newInput, lastKeyPressed)
+          setCurrentAccuracy(stats.accuracy)
+          setCurrentWPM(stats.wpm)
           
-          // 完了チェック
-          const progress = calculateRomajiProgress(raceText, value)
-          if (progress.isComplete && !raceFinished) {
-            setRaceFinished(true)
-          }
+          const romajiExpected = convertToRomaji(raceText)
+          const progress = raceText.length > 0 ? (validation.correctLength / romajiExpected.length) * 100 : 0
+          
+          socketService.updateDetailedStats(room.id, {
+            totalKeystrokes: stats.totalKeystrokes,
+            errorCount: stats.errorCount,
+            correctKeystrokes: stats.correctKeystrokes,
+            accuracy: stats.accuracy,
+            wpm: stats.wpm,
+            finished: validation.isComplete
+          }, Math.min(progress, 100))
         }
-        // 無効な入力は受け入れない（間違いがあると先に進めない）
+        
+        // 完了チェック（正確に入力された場合のみ）
+        if (validation.isComplete && !raceFinished) {
+          setRaceFinished(true)
+        }
       } else {
-        // 英語やローマ字の場合は厳密に文字比較
-        let isValid = true
-        for (let i = 0; i < value.length; i++) {
-          if (i >= raceText.length || value[i] !== raceText[i]) {
-            isValid = false
-            break
-          }
+        // 英語やローマ字の場合
+        // 詳細統計の更新
+        if (typingStats) {
+          const stats = typingStats.updateWithKeyInput(raceText, newInput, lastKeyPressed)
+          setCurrentAccuracy(stats.accuracy)
+          setCurrentWPM(stats.wpm)
         }
         
-        if (isValid) {
-          setUserInput(value)
-          
-          // 完了チェック
-          if (value.length >= raceText.length && !raceFinished) {
-            setRaceFinished(true)
-          }
+        // 完了チェック（正確に入力された場合のみ）
+        if (newInput === raceText && !raceFinished) {
+          setRaceFinished(true)
         }
-        // 無効な入力は受け入れない
       }
-    }
-  }
-
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    // IME制御：無効な文字の入力を阻止
-    const isValidKey = filterKeyboardInput(e.nativeEvent)
-    
-    if (!isValidKey) {
-      setImeWarning('ローマ字（半角英数字）のみで入力してください')
-      setTimeout(() => setImeWarning(''), 2000)
-      return
-    }
-    
-    // Enterキーで改行を防ぐ（タイピング競争では通常不要）
-    if (e.key === 'Enter') {
-      e.preventDefault()
     }
   }
 
@@ -451,9 +421,10 @@ function StudentPageContent() {
     router.push('/')
   }
 
+  // Calculate current statistics
   const currentStats = calculateStats()
-  const currentRank = participants
-    .filter(p => p.progress > 0)
+  const userRank = participants
+    .filter(p => p.progress > 0 || p.finished)
     .sort((a, b) => {
       if (a.finished && b.finished) {
         return (a.finishTime || 0) - (b.finishTime || 0)
@@ -476,7 +447,12 @@ function StudentPageContent() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-100 p-4">
+    <div 
+      ref={pageRef}
+      tabIndex={0}
+      className="min-h-screen bg-gradient-to-br from-green-50 to-blue-100 p-4 focus:outline-none"
+      style={{ userSelect: 'none' }}
+    >
       <div className="max-w-4xl mx-auto">
         <div className="bg-white rounded-xl shadow-xl p-6 mb-6">
           <div className="flex justify-between items-center mb-4">
@@ -491,47 +467,11 @@ function StudentPageContent() {
             </button>
           </div>
           
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-            <div className="bg-blue-50 p-4 rounded-lg text-center">
-              <h3 className="text-sm font-medium text-blue-800 mb-1">現在の順位</h3>
-              <p className="text-2xl font-bold text-blue-600">
-                {currentRank > 0 ? `${currentRank}位` : '-'}
-              </p>
-            </div>
-            <div className="bg-green-50 p-4 rounded-lg text-center">
-              <h3 className="text-sm font-medium text-green-800 mb-1">進捗</h3>
-              <p className="text-2xl font-bold text-green-600">
-                {Math.round(currentStats.progress)}%
-              </p>
-            </div>
-            <div className="bg-yellow-50 p-4 rounded-lg text-center">
-              <h3 className="text-sm font-medium text-yellow-800 mb-1">速度</h3>
-              <p className="text-2xl font-bold text-yellow-600">
-                {Math.round(currentStats.wpm)} WPM
-              </p>
-            </div>
-          </div>
-
           <div className="mb-4">
             <div className="flex justify-between items-center mb-2">
               <h3 className="text-lg font-semibold text-gray-800">進捗状況</h3>
-              <div className="flex items-center space-x-4">
-                <span className="text-sm text-gray-600">
-                  正確性: {Math.round(currentStats.accuracy)}%
-                </span>
-                {/* IME状態インジケーター */}
-                <div className={`flex items-center space-x-1 px-2 py-1 rounded-full text-xs ${
-                  imeState.isActive || imeState.composing
-                    ? 'bg-red-100 text-red-800'
-                    : 'bg-green-100 text-green-800'
-                }`}>
-                  <span className={`w-2 h-2 rounded-full ${
-                    imeState.isActive || imeState.composing ? 'bg-red-500' : 'bg-green-500'
-                  }`}></span>
-                  <span>
-                    {imeState.isActive || imeState.composing ? 'IME有効' : '英数字モード'}
-                  </span>
-                </div>
+              <div className="text-sm text-gray-600">
+                {Math.round(currentStats.progress)}% 完了
               </div>
             </div>
             <div className="w-full bg-gray-200 rounded-full h-3">
@@ -550,225 +490,139 @@ function StudentPageContent() {
         )}
 
         {!raceStarted ? (
-          <div className="bg-white rounded-xl shadow-xl p-8 text-center">
-            <h2 className="text-xl font-semibold text-gray-800 mb-4">
-              競争開始を待っています...
-            </h2>
-            <p className="text-gray-600 mb-6">
-              先生が競争を開始するまでお待ちください
-            </p>
-            <div className="text-sm text-gray-500">
-              <p>ルームPIN: <span className="font-bold">{room.id}</span></p>
-              <p>参加者: {participants.length}人</p>
+          <div className="space-y-6">
+            <div className="bg-white rounded-xl shadow-xl p-8 text-center">
+              <h2 className="text-xl font-semibold text-gray-800 mb-4">
+                競争開始を待っています...
+              </h2>
+              <p className="text-gray-600 mb-6">
+                先生が競争を開始するまでお待ちください
+              </p>
+              <div className="text-sm text-gray-500 mb-6">
+                <p>ルームPIN: <span className="font-bold">{room.id}</span></p>
+                <p>参加者: {participants.length}人</p>
+              </div>
+            </div>
+            
+            {/* 入力設定の事前説明 */}
+            <div className="bg-gradient-to-r from-blue-50 to-green-50 border-2 border-blue-200 rounded-xl p-6">
+              <div className="flex items-center space-x-2 mb-4">
+                <span className="text-blue-600 font-bold text-xl">⌨️</span>
+                <h3 className="text-lg font-bold text-blue-800">入力方法について</h3>
+              </div>
+              
+              <div className="space-y-3 text-sm">
+                <div className="bg-white rounded-lg p-4 border border-blue-200">
+                  <p className="font-bold text-gray-800 mb-2">📌 重要：キーボードでそのまま入力してください</p>
+                  <div className="space-y-2 text-gray-700">
+                    <p>• 競争が始まったら、<strong className="text-blue-600">画面に向かってキーボードで直接入力</strong>してください</p>
+                    <p>• 入力欄をクリックする必要はありません</p>
+                    <p>• <strong className="text-green-600">半角英数字（ローマ字）</strong>で入力してください</p>
+                  </div>
+                </div>
+                
+                <div className="bg-yellow-50 rounded-lg p-4 border border-yellow-300">
+                  <p className="font-bold text-orange-800 mb-2">💡 入力例</p>
+                  <div className="space-y-1 text-gray-700">
+                    <p>日本語「こんにちは」 → キーボードで「<span className="font-mono bg-gray-100 px-1 rounded">konnichiwa</span>」と入力</p>
+                    <p>日本語「ありがとう」 → キーボードで「<span className="font-mono bg-gray-100 px-1 rounded">arigatou</span>」と入力</p>
+                  </div>
+                </div>
+                
+                <div className="bg-green-50 rounded-lg p-4 border border-green-300">
+                  <p className="font-bold text-green-800 mb-2">🔧 便利機能</p>
+                  <div className="space-y-1 text-gray-700">
+                    <p>• 間違えた場合は<strong>Backspace</strong>キーで削除できます</p>
+                    <p>• システムが自動的に正しい入力に制限します</p>
+                    <p>• 日本語入力モードでも自動的に英数字に変換されます</p>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         ) : (
-          <div className="bg-white rounded-xl shadow-xl p-6">
-            <div className="mb-6">
-              <h2 className="text-xl font-semibold text-gray-800 mb-4">
-                {raceFinished ? '完了！お疲れ様でした！' : 'タイピング中...'}
+          <div className="space-y-6">
+            {/* タイトル */}
+            <div className="bg-white rounded-xl shadow-xl p-4 text-center">
+              <h2 className="text-xl font-semibold text-gray-800">
+                {raceFinished ? '🎉 完了！お疲れ様でした！' : '⚡ タイピング中...'}
               </h2>
-              
-              <div className="bg-gray-50 p-4 rounded-lg mb-4 font-mono text-lg leading-relaxed">
-                {raceMode === 'word' ? (
-                  // 単語モード表示
-                  <div>
-                    <div className="mb-2 text-sm text-gray-600">
-                      単語 {currentWordIndex + 1} / {wordList.length}
-                    </div>
-                    {currentWordIndex < wordList.length && (
-                      <div>
-                        <div className="text-2xl font-bold mb-2">
-                          {wordList[currentWordIndex].hiragana || wordList[currentWordIndex].word}
-                        </div>
-                        {(textType === 'japanese' || (wordList[currentWordIndex].hiragana && wordList[currentWordIndex].hiragana!.match(/[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]/))) && (
-                          <div className="text-sm text-blue-600">
-                            ローマ字: {fixedRomajiPatterns[currentWordIndex] || wordList[currentWordIndex].romaji.join(' または ')}
-                          </div>
-                        )}
-                      </div>
-                    )}
-                    {currentWordIndex >= wordList.length && (
-                      <div className="text-2xl font-bold text-green-600">
-                        全単語完了！
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  // 文章モード表示（従来通り）
-                  <div>
-                    <div className="mb-2 text-sm text-gray-600">
-                      {textType === 'japanese' || (!textType && /[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]/.test(raceText)) 
-                        ? `入力テキスト（ローマ字で入力）: ${convertToRomajiPatterns(raceText).join('')}`
-                        : '入力テキスト:'
-                      }
-                    </div>
-                    {raceText.split('').map((char, index) => {
-                      let className = ''
-                      
-                      // 日本語の場合はローマ字進捗で表示を制御
-                      if (textType === 'japanese' || (!textType && /[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]/.test(raceText))) {
-                        const romajiProgress = calculateRomajiProgress(raceText, userInput)
-                        const textProgress = (romajiProgress.progress / 100) * raceText.length
-                        
-                        if (index < textProgress) {
-                          className = 'bg-green-200 text-green-800'
-                        } else if (index === Math.floor(textProgress)) {
-                          className = 'bg-blue-200'
-                        }
-                      } else {
-                        // 英語の場合は従来通り
-                        if (index < userInput.length) {
-                          className = userInput[index] === char 
-                            ? 'bg-green-200 text-green-800' 
-                            : 'bg-red-200 text-red-800'
-                        } else if (index === userInput.length) {
-                          className = 'bg-blue-200'
-                        }
-                      }
-                      
-                      return (
-                        <span key={index} className={className}>
-                          {char}
-                        </span>
-                      )
-                    })}
-                  </div>
-                )}
-                
-                {/* 入力表示 */}
-                <div className="mt-2 text-sm">
-                  <div className="text-gray-600">現在の入力: <span className="font-bold">{userInput}</span></div>
+              {raceMode === 'word' && (
+                <div className="text-sm text-gray-600 mt-1">
+                  単語 {currentWordIndex + 1} / {wordList.length}
                 </div>
-              </div>
+              )}
+            </div>
               
-              <textarea
-                ref={textareaRef}
-                value={userInput}
-                onChange={handleInputChange}
-                onKeyDown={handleKeyDown}
-                disabled={!raceStarted || raceFinished}
-                placeholder={
-                  raceMode === 'word' 
-                    ? (currentWordIndex < wordList.length && (textType === 'japanese' || (wordList[currentWordIndex].hiragana && wordList[currentWordIndex].hiragana!.match(/[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]/)))
-                        ? `「${wordList[currentWordIndex].hiragana || wordList[currentWordIndex].word}」を「${fixedRomajiPatterns[currentWordIndex] || wordList[currentWordIndex].romaji[0]}」で入力...`
-                        : `「${wordList[currentWordIndex]?.word || ''}」を入力...`)
-                    : (textType === 'japanese' || (!textType && /[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]/.test(raceText))
-                        ? "ローマ字で入力してください (例: konnichiwa)..."
-                        : "ここに入力してください...")
-                }
-                className={`w-full h-32 p-4 border rounded-lg focus:outline-none focus:ring-2 font-mono text-lg disabled:bg-gray-100 ${
-                  imeState.isActive || imeWarning 
-                    ? 'border-red-500 focus:ring-red-500 bg-red-50' 
-                    : 'border-gray-300 focus:ring-green-500'
-                }`}
+            {/* 寿司打スタイルのタイピング表示 */}
+            {raceMode === 'word' && currentWordIndex < wordList.length && (
+              <TypingDisplay
+                japaneseText={wordList[currentWordIndex].hiragana || wordList[currentWordIndex].word || ''}
+                userInput={userInput}
+                isActive={raceStarted && !raceFinished}
+                mode="word"
               />
-              
-              {/* IME警告表示 */}
-              {(imeState.isActive || imeWarning) && (
-                <div className="mt-2 p-3 bg-red-100 border border-red-300 rounded-lg">
-                  <div className="flex items-center space-x-2">
-                    <span className="text-red-600 font-bold">⚠️</span>
-                    <div className="text-red-800">
-                      <p className="font-semibold">入力モード警告</p>
-                      <p className="text-sm">
-                        {imeWarning || 'IMEが有効になっています。半角英数字モードに切り替えてください。'}
-                      </p>
-                      <p className="text-xs mt-1 text-red-600">
-                        Windows: 「半角/全角」キー、または「Alt + `」で切り替え
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
+            )}
             
-            {/* リアルタイム統計パネル */}
-            <div className="bg-gray-50 p-4 rounded-lg mb-4">
-              <h4 className="text-sm font-semibold text-gray-700 mb-3">📊 リアルタイム統計</h4>
-              <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-sm">
-                <div className="text-center">
-                  <p className="text-gray-600">速度</p>
-                  <p className="font-bold text-blue-600">{Math.round(currentStats.wpm)} WPM</p>
-                </div>
-                <div className="text-center">
-                  <p className="text-gray-600">正確性</p>
-                  <p className="font-bold text-green-600">{Math.round(currentStats.accuracy)}%</p>
-                </div>
-                <div className="text-center">
-                  <p className="text-gray-600">順位</p>
-                  <p className="font-bold text-purple-600">{currentRank}位</p>
-                </div>
-                <div className="text-center">
-                  <p className="text-gray-600">タイプミス</p>
-                  <p className="font-bold text-red-600">{globalTypingStats.errorCount}回</p>
-                </div>
-                <div className="text-center">
-                  <p className="text-gray-600">経過時間</p>
-                  <p className="font-bold text-orange-600">
-                    {globalTypingStats.startTime 
-                      ? Math.round((Date.now() - globalTypingStats.startTime) / 1000)
-                      : 0
-                    }秒
-                  </p>
-                </div>
-              </div>
-              {currentWordStats && raceMode === 'word' && (
-                <div className="mt-3 p-2 bg-white rounded border">
-                  <p className="text-xs text-gray-600 mb-1">現在の単語統計</p>
-                  <div className="flex justify-between text-xs">
-                    <span>速度: <span className="font-medium text-blue-600">{Math.round(currentWordStats.wpm)}WPM</span></span>
-                    <span>正確性: <span className="font-medium text-green-600">{Math.round(currentWordStats.accuracy)}%</span></span>
-                    <span>ミス: <span className="font-medium text-red-600">{currentWordStats.errorCount}回</span></span>
-                  </div>
-                </div>
-              )}
-            </div>
+            {raceMode === 'sentence' && raceText && (
+              <TypingDisplay
+                japaneseText={raceText}
+                userInput={userInput}
+                isActive={raceStarted && !raceFinished}
+                mode="sentence"
+              />
+            )}
             
-            {raceFinished && (
-              <div className="bg-green-50 p-4 rounded-lg text-center">
-                <h3 className="text-lg font-semibold text-green-800 mb-2">
-                  🎉 完了しました！
-                </h3>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                  <div>
-                    <p className="text-gray-600">最終順位</p>
-                    <p className="font-bold text-green-600">{currentRank}位</p>
-                  </div>
-                  <div>
-                    <p className="text-gray-600">平均速度</p>
-                    <p className="font-bold text-green-600">{Math.round(currentStats.wpm)} WPM</p>
-                  </div>
-                  <div>
-                    <p className="text-gray-600">正確性</p>
-                    <p className="font-bold text-green-600">{Math.round(currentStats.accuracy)}%</p>
-                  </div>
-                  <div>
-                    <p className="text-gray-600">タイプミス</p>
-                    <p className="font-bold text-red-600">{globalTypingStats.errorCount}回</p>
-                  </div>
+            {/* 詳細統計表示 */}
+            {(raceMode === 'word' && currentWordIndex >= wordList.length) && (
+              <div className="text-center p-8 bg-gradient-to-br from-green-50 to-blue-50 rounded-xl border-2 border-green-300">
+                <h3 className="text-3xl font-bold text-green-800 mb-4">🏆 全単語完了！</h3>
+                <p className="text-xl text-green-600 mb-2">お疲れ様でした！</p>
+                <div className="text-lg text-gray-600">
+                  最終スコアは順位表をご確認ください
                 </div>
-                {raceMode === 'word' && allWordStats.length > 0 && (
-                  <div className="mt-4">
-                    <h4 className="text-sm font-medium text-gray-700 mb-2">単語別統計</h4>
-                    <div className="max-h-32 overflow-y-auto">
-                      <div className="space-y-1 text-xs">
-                        {allWordStats.map((wordStat, index) => (
-                          <div key={index} className="flex justify-between items-center bg-white px-2 py-1 rounded">
-                            <span>{wordStat.expectedInput}</span>
-                            <div className="flex space-x-2">
-                              <span className="text-blue-600">{Math.round(wordStat.wpm)}WPM</span>
-                              <span className="text-green-600">{Math.round(wordStat.accuracy)}%</span>
-                              <span className="text-red-600">{wordStat.errorCount}ミス</span>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                )}
               </div>
             )}
+
+            {/* 入力制限状態の表示 */}
+            <div className="p-4 bg-gradient-to-r from-blue-50 to-green-50 border-2 border-blue-200 rounded-lg">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center space-x-2">
+                  <span className="text-blue-600 font-bold text-lg">⌨️</span>
+                  <span className="font-bold text-blue-800">入力モード: {inputModeDetected}</span>
+                </div>
+                {inputRestricted && (
+                  <div className="flex items-center space-x-1">
+                    <span className="text-green-600 font-bold text-sm">✅</span>
+                    <span className="text-green-700 text-sm font-medium">制限有効</span>
+                  </div>
+                )}
+              </div>
+              
+              {showInputHelp && (
+                <div className="bg-orange-100 border border-orange-300 rounded-lg p-3 mb-3">
+                  <div className="flex items-center space-x-2 mb-2">
+                    <span className="text-orange-600 font-bold">⚠️</span>
+                    <span className="font-bold text-orange-800">日本語入力が検出されました</span>
+                  </div>
+                  <div className="text-orange-700 text-sm space-y-1">
+                    <p>• このゲームは半角英数字（ローマ字）での入力が必要です</p>
+                    <p>• システムが自動的に半角英数字入力に制限しています</p>
+                    <p>• そのままキーボードで入力を続けてください</p>
+                  </div>
+                </div>
+              )}
+              
+              <div className="text-sm text-gray-600 space-y-1">
+                <p><strong>💡 操作方法:</strong> キーボードで直接入力、Backspaceで削除</p>
+                <p><strong>🔤 入力方法:</strong> 日本語をローマ字で入力（例: こんにちは → konnichiwa）</p>
+                {imeState.isActive && (
+                  <p className="text-orange-600 font-medium">
+                    <strong>🔄 自動制御:</strong> IME（日本語入力）が検出されましたが、システムが英数字入力に制限しています
+                  </p>
+                )}
+              </div>
+            </div>
           </div>
         )}
 
@@ -825,14 +679,12 @@ function StudentPageContent() {
 
 export default function StudentPage() {
   return (
-    <Suspense fallback={
-      <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-100 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-500 mx-auto mb-4"></div>
-          <p className="text-gray-600">読み込み中...</p>
-        </div>
+    <Suspense fallback={<div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-100 flex items-center justify-center">
+      <div className="text-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-500 mx-auto mb-4"></div>
+        <p className="text-gray-600">ページを読み込んでいます...</p>
       </div>
-    }>
+    </div>}>
       <StudentPageContent />
     </Suspense>
   )

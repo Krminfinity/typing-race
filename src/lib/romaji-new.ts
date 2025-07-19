@@ -360,7 +360,6 @@ export class AccurateTypingStats {
   private correctKeystrokes: number = 0
   private errorCount: number = 0
   private lastInput: string = ''
-  private lastInputLength: number = 0
   
   constructor() {
     this.startTime = Date.now()
@@ -373,62 +372,30 @@ export class AccurateTypingStats {
     wpm: number
     totalKeystrokes: number
     errorCount: number
-    correctKeystrokes: number
   } {
+    this.totalKeystrokes++
+    
     const validation = validateRomajiInputWithPatterns(targetText, currentInput)
+    const wasCorrect = currentInput.length <= validation.correctLength
     
-    // 入力が短くなった場合（Backspace等）は統計を更新しない
-    if (currentInput.length < this.lastInputLength) {
-      this.lastInput = currentInput
-      this.lastInputLength = currentInput.length
-      const accuracy = this.totalKeystrokes > 0 ? (this.correctKeystrokes / this.totalKeystrokes) * 100 : 100
-      const elapsedMinutes = (Date.now() - this.startTime) / (1000 * 60)
-      const wpm = elapsedMinutes > 0 ? (this.correctKeystrokes / 5) / elapsedMinutes : 0
-      
-      return {
-        isCorrect: validation.isValid,
-        accuracy: Math.round(accuracy * 100) / 100,
-        wpm: Math.round(wpm * 100) / 100,
-        totalKeystrokes: this.totalKeystrokes,
-        errorCount: this.errorCount,
-        correctKeystrokes: this.correctKeystrokes
-      }
-    }
-    
-    // 新しい文字が追加された場合のみ統計を更新
-    if (currentInput.length > this.lastInputLength) {
-      const newCharCount = currentInput.length - this.lastInputLength
-      
-      for (let i = 0; i < newCharCount; i++) {
-        this.totalKeystrokes++
-        
-        // 入力位置での正確性チェック
-        const inputPosition = this.lastInputLength + i
-        const wasCorrect = inputPosition < validation.correctLength
-        
-        if (wasCorrect) {
-          this.correctKeystrokes++
-        } else {
-          this.errorCount++
-        }
-      }
+    if (wasCorrect) {
+      this.correctKeystrokes++
+    } else {
+      this.errorCount++
     }
     
     this.lastInput = currentInput
-    this.lastInputLength = currentInput.length
     
     const accuracy = this.totalKeystrokes > 0 ? (this.correctKeystrokes / this.totalKeystrokes) * 100 : 100
     const elapsedMinutes = (Date.now() - this.startTime) / (1000 * 60)
-    // WPM = 正しく入力した文字数 ÷ 5 ÷ 経過分数（標準的な計算方法）
     const wpm = elapsedMinutes > 0 ? (this.correctKeystrokes / 5) / elapsedMinutes : 0
     
     return {
-      isCorrect: validation.isValid,
-      accuracy: Math.round(accuracy * 100) / 100,
+      isCorrect: wasCorrect,
+      accuracy: Math.round(accuracy * 100) / 100, // 小数点2桁まで
       wpm: Math.round(wpm * 100) / 100,
       totalKeystrokes: this.totalKeystrokes,
-      errorCount: this.errorCount,
-      correctKeystrokes: this.correctKeystrokes
+      errorCount: this.errorCount
     }
   }
   
@@ -450,21 +417,12 @@ export class AccurateTypingStats {
     }
   }
   
-  // 入力位置をリセット（単語完了時など）- 統計はリセットしない
-  resetInput() {
-    this.lastInput = ''
-    this.lastInputLength = 0
-    // 統計情報（totalKeystrokes, errorCount, correctKeystrokes）はリセットしない
-  }
-  
-  // 完全リセット（新しいレース開始時のみ）
   reset() {
     this.startTime = Date.now()
     this.totalKeystrokes = 0
     this.correctKeystrokes = 0
     this.errorCount = 0
     this.lastInput = ''
-    this.lastInputLength = 0
   }
 }
 
@@ -585,173 +543,4 @@ export function updateWordStats(
   updatedStats.isCompleted = validation.isComplete
   
   return updatedStats
-}
-
-/**
- * Advanced adaptive romaji conversion with real-time pattern switching
- * 生徒の入力に合わせてリアルタイムでローマ字パターンを切り替える
- */
-export function getAdaptiveRomajiPattern(japanese: string, userInput: string): {
-  pattern: string
-  variations: Array<{ original: string, adapted: string, reason: string }>
-} {
-  // 表記ゆれのパターン辞書（優先度順）
-  const variationMap: { [key: string]: string[] } = {
-    'し': ['shi', 'si'],
-    'ち': ['chi', 'ti'],
-    'つ': ['tsu', 'tu'],
-    'ふ': ['fu', 'hu'],
-    'じ': ['ji', 'zi'],
-    'ぢ': ['di', 'zi'],
-    'づ': ['du', 'zu'],
-    'しゃ': ['sha', 'sya'],
-    'しゅ': ['shu', 'syu'],
-    'しょ': ['sho', 'syo'],
-    'ちゃ': ['cha', 'tya'],
-    'ちゅ': ['chu', 'tyu'],
-    'ちょ': ['cho', 'tyo'],
-    'じゃ': ['ja', 'jya', 'zya'],
-    'じゅ': ['ju', 'jyu', 'zyu'],
-    'じょ': ['jo', 'jyo', 'zyo'],
-    'ん': ['n', 'nn'],
-    'っ': ['xtu', 'ltu', 'tsu'],
-    'ー': ['-', ''],
-    'を': ['wo', 'o']
-  }
-  
-  let adaptedPattern = convertToRomaji(japanese)
-  const variations: Array<{ original: string, adapted: string, reason: string }> = []
-  
-  // 日本語文字を順番に処理
-  for (let i = 0; i < japanese.length; i++) {
-    const char = japanese[i]
-    
-    if (variationMap[char]) {
-      const patterns = variationMap[char]
-      const currentPosition = convertToRomaji(japanese.substring(0, i)).length
-      
-      // ユーザーの入力がこの位置に達している場合
-      if (userInput.length > currentPosition) {
-        const userSegment = userInput.substring(currentPosition)
-        
-        // 最もマッチするパターンを見つける
-        for (const pattern of patterns) {
-          if (userSegment.startsWith(pattern) || 
-              (userSegment.length < pattern.length && pattern.startsWith(userSegment))) {
-            
-            if (pattern !== patterns[0]) { // デフォルトと異なる場合のみ
-              adaptedPattern = adaptedPattern.replace(
-                new RegExp(patterns[0], 'g'),
-                pattern
-              )
-              variations.push({
-                original: patterns[0],
-                adapted: pattern,
-                reason: `「${char}」の入力パターンを ${patterns[0]} → ${pattern} に適応`
-              })
-            }
-            break
-          }
-        }
-      }
-    }
-  }
-  
-  return {
-    pattern: adaptedPattern,
-    variations
-  }
-}
-
-/**
- * Real-time typing progress analyzer with visual feedback data
- * リアルタイムのタイピング進捗を視覚的フィードバック用に解析
- */
-export function analyzeTypingProgress(japanese: string, userInput: string): {
-  romajiPattern: string
-  characters: Array<{
-    japanese: string
-    romaji: string
-    status: 'correct' | 'incorrect' | 'current' | 'pending'
-    position: number
-    userChar?: string
-  }>
-  stats: {
-    correct: number
-    incorrect: number
-    pending: number
-    total: number
-    accuracy: number
-  }
-  adaptations: Array<{ original: string, adapted: string, reason: string }>
-} {
-  const adaptive = getAdaptiveRomajiPattern(japanese, userInput)
-  const romajiPattern = adaptive.pattern
-  
-  const characters: Array<{
-    japanese: string
-    romaji: string
-    status: 'correct' | 'incorrect' | 'current' | 'pending'
-    position: number
-    userChar?: string
-  }> = []
-  
-  let romajiIndex = 0
-  
-  // 日本語文字ごとに解析
-  for (let i = 0; i < japanese.length; i++) {
-    const japaneseChar = japanese[i]
-    const charRomaji = convertToRomaji(japaneseChar)
-    const adaptedCharRomaji = romajiPattern.substring(romajiIndex, romajiIndex + charRomaji.length)
-    
-    // この文字の入力状況を判定
-    let status: 'correct' | 'incorrect' | 'current' | 'pending' = 'pending'
-    let userChar: string | undefined
-    
-    if (userInput.length > romajiIndex) {
-      const userSegment = userInput.substring(romajiIndex, romajiIndex + adaptedCharRomaji.length)
-      
-      if (userSegment.length === adaptedCharRomaji.length) {
-        status = userSegment === adaptedCharRomaji ? 'correct' : 'incorrect'
-        userChar = userSegment
-      } else if (userSegment.length > 0) {
-        // 部分入力の場合
-        const isPartialCorrect = adaptedCharRomaji.startsWith(userSegment)
-        status = isPartialCorrect ? 'current' : 'incorrect'
-        userChar = userSegment
-      }
-    } else if (userInput.length === romajiIndex) {
-      status = 'current'
-    }
-    
-    characters.push({
-      japanese: japaneseChar,
-      romaji: adaptedCharRomaji,
-      status,
-      position: romajiIndex,
-      userChar
-    })
-    
-    romajiIndex += adaptedCharRomaji.length
-  }
-  
-  // 統計計算
-  const correct = characters.filter(c => c.status === 'correct').length
-  const incorrect = characters.filter(c => c.status === 'incorrect').length
-  const pending = characters.filter(c => c.status === 'pending').length
-  const total = characters.length
-  const accuracy = total > 0 ? (correct / total) * 100 : 100
-  
-  return {
-    romajiPattern,
-    characters,
-    stats: {
-      correct,
-      incorrect,
-      pending,
-      total,
-      accuracy
-    },
-    adaptations: adaptive.variations
-  }
 }

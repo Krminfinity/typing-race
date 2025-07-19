@@ -9,6 +9,17 @@ export interface Participant {
   finished: boolean
   finishTime?: number
   currentWordIndex?: number
+  typingStats?: {
+    totalKeystrokes: number
+    errorCount: number
+    correctKeystrokes: number
+    startTime: number | null
+    endTime: number | null
+    finalAccuracy: number
+    finalWPM: number
+    finalErrorCount: number
+    wordStats: any[]
+  }
 }
 
 export interface Room {
@@ -83,12 +94,32 @@ class SocketService {
     customText?: string
   }) {
     if (!this.socket) return
+    console.log('Emitting start-race with options:', { pin, ...options })
     this.socket.emit('start-race', { pin, ...options })
+  }
+
+  resetRace(pin: string) {
+    if (!this.socket) return
+    console.log('Emitting reset-race for room:', pin)
+    this.socket.emit('reset-race', { pin })
   }
 
   updateTypingStats(pin: string, progress: number, typingStats: any, wordStats?: any) {
     if (!this.socket) return
     this.socket.emit('update-typing-stats', { pin, progress, typingStats, wordStats })
+  }
+
+  updateDetailedStats(pin: string, stats: {
+    totalKeystrokes: number
+    errorCount: number
+    correctKeystrokes: number
+    accuracy: number
+    wpm: number
+    finished?: boolean
+  }, progress?: number) {
+    if (!this.socket) return
+    console.log('Sending detailed stats:', { pin, stats, progress })
+    this.socket.emit('update-detailed-stats', { pin, stats, progress })
   }
 
   updateProgress(pin: string, progress: number, wpm: number, accuracy: number, currentWordIndex?: number) {
@@ -109,8 +140,21 @@ class SocketService {
     wordList?: Array<{ hiragana?: string, word?: string, romaji: string[] }>
     fixedRomajiPatterns?: string[]
   }) => void) {
-    if (!this.socket) return
+    if (!this.socket) {
+      console.warn('Socket not connected when trying to listen for race-started')
+      return
+    }
+    console.log('Setting up race-started listener')
     this.socket.on('race-started', callback)
+  }
+
+  onRaceReset(callback: () => void) {
+    if (!this.socket) {
+      console.warn('Socket not connected when trying to listen for race-reset')
+      return
+    }
+    console.log('Setting up race-reset listener')
+    this.socket.on('race-reset', callback)
   }
 
   onParticipantUpdate(callback: (data: { participants: Participant[] }) => void) {
