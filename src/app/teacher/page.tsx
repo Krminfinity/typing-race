@@ -14,6 +14,35 @@ function TeacherPageContent() {
   const [raceStarted, setRaceStarted] = useState(false)
   const [error, setError] = useState('')
   
+  // 全体成績統計の計算
+  const calculateOverallStats = () => {
+    if (participants.length === 0) return null
+    
+    const totalParticipants = participants.length
+    const finishedParticipants = participants.filter(p => p.finished).length
+    const averageWpm = participants.reduce((sum, p) => sum + (p.stats?.wpm || 0), 0) / totalParticipants
+    const averageAccuracy = participants.reduce((sum, p) => sum + (p.stats?.accuracy || 0), 0) / totalParticipants
+    const totalMistakes = participants.reduce((sum, p) => sum + (p.stats?.mistakes || 0), 0)
+    const totalCompletedWords = participants.reduce((sum, p) => sum + (p.stats?.completedWords || 0), 0)
+    const totalChars = participants.reduce((sum, p) => sum + (p.stats?.totalChars || 0), 0)
+    
+    const topWpm = Math.max(...participants.map(p => p.stats?.wpm || 0))
+    const topAccuracy = Math.max(...participants.map(p => p.stats?.accuracy || 0))
+    
+    return {
+      totalParticipants,
+      finishedParticipants,
+      averageWpm,
+      averageAccuracy,
+      totalMistakes,
+      totalCompletedWords,
+      totalChars,
+      topWpm,
+      topAccuracy,
+      completionRate: (finishedParticipants / totalParticipants) * 100
+    }
+  }
+  
   // 問題設定用の状態（文章モード削除）
   const [textType, setTextType] = useState<'japanese' | 'english' | 'romaji'>('japanese')
   const [difficulty, setDifficulty] = useState<'easy' | 'medium' | 'hard'>('easy')
@@ -81,36 +110,50 @@ function TeacherPageContent() {
     }
   }
 
-  const getDefaultText = (type: string, level: string) => {
-    const texts = {
-      japanese: {
-        easy: 'これは簡単な日本語のタイピング練習です。ゆっくりと正確に入力しましょう。',
-        medium: '中級者向けの日本語タイピングです。句読点や記号も含まれます。頑張って！',
-        hard: '上級者向けの複雑な日本語文章です。「」や！？などの記号、数字123も含まれます。集中して正確に入力してください。'
-      }
-    }
-    
-    return texts[type as keyof typeof texts]?.[level as keyof typeof texts.japanese] || texts.japanese.easy
-  }
-
   const handleExportCSV = () => {
     if (!participants.length) {
       alert('エクスポートする参加者データがありません。')
       return
     }
 
+    const overallStats = calculateOverallStats()
+
     // CSV データを作成
-    const headers = ['名前', 'WPM', '正確率', 'ミス数', '完了単語数', '総入力文字数']
+    const headers = ['名前', 'WPM', '正確率(%)', 'ミス数', '完了単語数', '総入力文字数', '完了状況', '順位']
     const csvData = [
       headers.join(','),
-      ...participants.map(p => [
-        p.name,
-        p.stats?.wpm?.toFixed(1) || '0.0',
-        p.stats?.accuracy?.toFixed(1) || '0.0',
-        p.stats?.mistakes || '0',
-        p.stats?.completedWords || '0',
-        p.stats?.totalChars || '0'
-      ].join(','))
+      // 個別成績
+      ...participants
+        .sort((a, b) => {
+          if (a.finished && b.finished) {
+            return (a.finishTime || 0) - (b.finishTime || 0)
+          }
+          if (a.finished) return -1
+          if (b.finished) return 1
+          return (b.progress || 0) - (a.progress || 0)
+        })
+        .map((p, index) => [
+          p.name,
+          p.stats?.wpm?.toFixed(1) || '0.0',
+          p.stats?.accuracy?.toFixed(1) || '0.0',
+          p.stats?.mistakes || '0',
+          p.stats?.completedWords || '0',
+          p.stats?.totalChars || '0',
+          p.finished ? '完了' : '未完了',
+          index + 1
+        ].join(',')),
+      '', // 空行
+      '=== 全体統計 ===',
+      `総参加者数,${overallStats?.totalParticipants || 0}`,
+      `完了者数,${overallStats?.finishedParticipants || 0}`,
+      `完了率(%),${overallStats?.completionRate?.toFixed(1) || '0.0'}`,
+      `平均WPM,${overallStats?.averageWpm?.toFixed(1) || '0.0'}`,
+      `平均正確率(%),${overallStats?.averageAccuracy?.toFixed(1) || '0.0'}`,
+      `最高WPM,${overallStats?.topWpm?.toFixed(1) || '0.0'}`,
+      `最高正確率(%),${overallStats?.topAccuracy?.toFixed(1) || '0.0'}`,
+      `総ミス数,${overallStats?.totalMistakes || 0}`,
+      `総完了単語数,${overallStats?.totalCompletedWords || 0}`,
+      `総入力文字数,${overallStats?.totalChars || 0}`
     ].join('\n')
 
     // BOM付きでダウンロード（Excel対応）
@@ -173,7 +216,7 @@ function TeacherPageContent() {
           {/* 参加者リスト */}
           <div className="bg-gray-50 p-4 rounded-lg mb-6">
             <h3 className="text-lg font-semibold text-gray-800 mb-3">
-              参加者一覧
+              参加者一覧 {raceStarted && <span className="text-sm text-blue-600">(リアルタイム成績)</span>}
             </h3>
             {participants.length === 0 ? (
               <div className="text-center py-8">
@@ -184,36 +227,169 @@ function TeacherPageContent() {
                 </p>
               </div>
             ) : (
-              <div className="space-y-2">
-                {participants.map((participant) => (
-                  <div
-                    key={participant.id}
-                    className="flex items-center justify-between bg-white p-3 rounded-lg shadow-sm"
-                  >
-                    <div className="flex items-center space-x-3">
-                      <div className="w-8 h-8 bg-blue-500 text-white rounded-full flex items-center justify-center text-sm font-bold">
-                        {participant.name.charAt(0)}
-                      </div>
-                      <span className="font-medium text-gray-800">
-                        {participant.name}
-                      </span>
-                    </div>
-                    
-                    {participant.stats && (
-                      <div className="flex space-x-4 text-sm">
-                        <span className="text-blue-600 font-semibold">
-                          {participant.stats.wpm?.toFixed(1) || '0.0'} WPM
-                        </span>
-                        <span className="text-green-600 font-semibold">
-                          {participant.stats.accuracy?.toFixed(1) || '0.0'}%
-                        </span>
-                        <span className="text-red-600 font-semibold">
-                          ミス: {participant.stats.mistakes || 0}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                ))}
+              <div className="overflow-x-auto">
+                <table className="w-full bg-white rounded-lg shadow-sm border border-gray-200">
+                  <thead>
+                    <tr className="bg-gray-100 border-b border-gray-200">
+                      {raceStarted && (
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                          順位
+                        </th>
+                      )}
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                        名前
+                      </th>
+                      {raceStarted && (
+                        <>
+                          <th className="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                            進捗率
+                          </th>
+                          <th className="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                            WPM
+                          </th>
+                          <th className="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                            正確率
+                          </th>
+                          <th className="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                            ミス数
+                          </th>
+                          <th className="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                            完了単語数
+                          </th>
+                          <th className="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                            総文字数
+                          </th>
+                          <th className="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                            状態
+                          </th>
+                          <th className="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                            進捗バー
+                          </th>
+                        </>
+                      )}
+                      {!raceStarted && (
+                        <th className="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                          状態
+                        </th>
+                      )}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200">
+                    {participants
+                      .sort((a, b) => {
+                        // レース中は成績でソート、レース前は参加順
+                        if (!raceStarted) return 0
+                        if (a.finished && b.finished) {
+                          return (a.finishTime || 0) - (b.finishTime || 0)
+                        }
+                        if (a.finished) return -1
+                        if (b.finished) return 1
+                        return (b.progress || 0) - (a.progress || 0)
+                      })
+                      .map((participant, index) => (
+                        <tr
+                          key={participant.id}
+                          className={`hover:bg-gray-50 ${
+                            raceStarted && index < 3 
+                              ? ['bg-yellow-50', 'bg-gray-50', 'bg-orange-50'][index] 
+                              : ''
+                          }`}
+                        >
+                          {raceStarted && (
+                            <td className="px-4 py-3">
+                              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
+                                index < 3 
+                                  ? ['bg-yellow-500 text-white', 'bg-gray-500 text-white', 'bg-orange-500 text-white'][index]
+                                  : 'bg-blue-500 text-white'
+                              }`}>
+                                {index + 1}
+                              </div>
+                            </td>
+                          )}
+                          <td className="px-4 py-3">
+                            <div className="flex items-center space-x-3">
+                              <div className="w-10 h-10 bg-blue-500 text-white rounded-full flex items-center justify-center text-sm font-bold">
+                                {participant.name.charAt(0)}
+                              </div>
+                              <div>
+                                <div className="font-medium text-gray-900 text-lg">
+                                  {participant.name}
+                                </div>
+                                <div className="text-sm text-gray-500">
+                                  ID: {participant.id.slice(-8)}
+                                </div>
+                              </div>
+                            </div>
+                          </td>
+                          {raceStarted && (
+                            <>
+                              <td className="px-4 py-3 text-center">
+                                <div className="text-lg font-semibold text-blue-600">
+                                  {participant.progress?.toFixed(1) || '0.0'}%
+                                </div>
+                              </td>
+                              <td className="px-4 py-3 text-center">
+                                <div className="text-lg font-semibold text-purple-600">
+                                  {participant.stats?.wpm?.toFixed(1) || '0.0'}
+                                </div>
+                                <div className="text-xs text-gray-500">WPM</div>
+                              </td>
+                              <td className="px-4 py-3 text-center">
+                                <div className="text-lg font-semibold text-green-600">
+                                  {participant.stats?.accuracy?.toFixed(1) || '0.0'}%
+                                </div>
+                              </td>
+                              <td className="px-4 py-3 text-center">
+                                <div className="text-lg font-semibold text-red-600">
+                                  {participant.stats?.mistakes || 0}
+                                </div>
+                              </td>
+                              <td className="px-4 py-3 text-center">
+                                <div className="text-lg font-semibold text-indigo-600">
+                                  {participant.stats?.completedWords || 0}
+                                </div>
+                              </td>
+                              <td className="px-4 py-3 text-center">
+                                <div className="text-lg font-semibold text-gray-600">
+                                  {participant.stats?.totalChars || 0}
+                                </div>
+                              </td>
+                              <td className="px-4 py-3 text-center">
+                                {participant.finished ? (
+                                  <div className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-800">
+                                    ✅ 完了
+                                  </div>
+                                ) : (
+                                  <div className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800">
+                                    🏃 進行中
+                                  </div>
+                                )}
+                              </td>
+                              <td className="px-4 py-3">
+                                <div className="w-full bg-gray-200 rounded-full h-4">
+                                  <div 
+                                    className="bg-blue-500 h-4 rounded-full transition-all duration-300 flex items-center justify-center"
+                                    style={{ width: `${Math.min(participant.progress || 0, 100)}%` }}
+                                  >
+                                    <span className="text-white text-xs font-bold">
+                                      {participant.progress >= 10 ? `${(participant.progress || 0).toFixed(0)}%` : ''}
+                                    </span>
+                                  </div>
+                                </div>
+                              </td>
+                            </>
+                          )}
+                          {!raceStarted && (
+                            <td className="px-4 py-3 text-center">
+                              <div className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-gray-100 text-gray-800">
+                                ⏳ 待機中
+                              </div>
+                            </td>
+                          )}
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
                 
                 {/* CSV エクスポートボタン */}
                 {raceStarted && (
@@ -235,7 +411,69 @@ function TeacherPageContent() {
           </div>
         </div>
 
-        {/* 問題設定セクション（自動入力制限機能の説明部分を削除） */}
+        {/* 全体統計セクション */}
+        {raceStarted && participants.length > 0 && (() => {
+          const overallStats = calculateOverallStats()
+          return overallStats ? (
+            <div className="bg-white rounded-xl shadow-xl p-6 mb-6">
+              <h2 className="text-xl font-semibold text-gray-800 mb-4 flex items-center space-x-2">
+                <span>📈</span>
+                <span>全体統計</span>
+              </h2>
+              
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                <div className="bg-blue-50 p-4 rounded-lg text-center">
+                  <div className="text-2xl font-bold text-blue-600">{overallStats.totalParticipants}</div>
+                  <div className="text-sm text-gray-600">総参加者数</div>
+                </div>
+                
+                <div className="bg-green-50 p-4 rounded-lg text-center">
+                  <div className="text-2xl font-bold text-green-600">{overallStats.finishedParticipants}</div>
+                  <div className="text-sm text-gray-600">完了者数</div>
+                </div>
+                
+                <div className="bg-purple-50 p-4 rounded-lg text-center">
+                  <div className="text-2xl font-bold text-purple-600">{overallStats.completionRate.toFixed(1)}%</div>
+                  <div className="text-sm text-gray-600">完了率</div>
+                </div>
+                
+                <div className="bg-orange-50 p-4 rounded-lg text-center">
+                  <div className="text-2xl font-bold text-orange-600">{overallStats.totalMistakes}</div>
+                  <div className="text-sm text-gray-600">総ミス数</div>
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="bg-gray-50 p-4 rounded-lg">
+                  <h3 className="font-semibold text-gray-700 mb-2">📊 平均成績</h3>
+                  <div className="space-y-1 text-sm">
+                    <div>WPM: <span className="font-semibold text-blue-600">{overallStats.averageWpm.toFixed(1)}</span></div>
+                    <div>正確率: <span className="font-semibold text-green-600">{overallStats.averageAccuracy.toFixed(1)}%</span></div>
+                    <div>完了単語数: <span className="font-semibold text-purple-600">{Math.round(overallStats.totalCompletedWords / overallStats.totalParticipants)}</span></div>
+                  </div>
+                </div>
+                
+                <div className="bg-gray-50 p-4 rounded-lg">
+                  <h3 className="font-semibold text-gray-700 mb-2">🏆 最高記録</h3>
+                  <div className="space-y-1 text-sm">
+                    <div>最高WPM: <span className="font-semibold text-blue-600">{overallStats.topWpm.toFixed(1)}</span></div>
+                    <div>最高正確率: <span className="font-semibold text-green-600">{overallStats.topAccuracy.toFixed(1)}%</span></div>
+                  </div>
+                </div>
+                
+                <div className="bg-gray-50 p-4 rounded-lg">
+                  <h3 className="font-semibold text-gray-700 mb-2">📝 合計データ</h3>
+                  <div className="space-y-1 text-sm">
+                    <div>完了単語: <span className="font-semibold text-purple-600">{overallStats.totalCompletedWords}</span></div>
+                    <div>入力文字: <span className="font-semibold text-gray-600">{overallStats.totalChars}</span></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : null
+        })()}
+
+        {/* 問題設定セクション */}
         {!raceStarted && (
           <div className="bg-white rounded-xl shadow-xl p-6 mb-6">
             <h2 className="text-xl font-semibold text-gray-800 mb-4">

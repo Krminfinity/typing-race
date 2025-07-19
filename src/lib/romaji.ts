@@ -27,8 +27,9 @@ export enum RomajiStyle {
   NIHON = 'nihon'           // 日本式
 }
 
-// 包括的なローマ字パターンマップ（表記ゆれ対応）
+// 包括的なローマ字パターンマップ（参考資料の対応表に基づく完全版）
 const romajiPatterns: { [key: string]: string[] } = {
+  // 基本五十音
   'あ': ['a'],
   'い': ['i'],
   'う': ['u'],
@@ -45,9 +46,9 @@ const romajiPatterns: { [key: string]: string[] } = {
   'げ': ['ge'],
   'ご': ['go'],
   'さ': ['sa'],
-  'し': ['shi', 'si'],
+  'し': ['shi', 'si', 'ci'],
   'す': ['su'],
-  'せ': ['se'],
+  'せ': ['se', 'ce'],
   'そ': ['so'],
   'ざ': ['za'],
   'じ': ['ji', 'zi'],
@@ -61,7 +62,7 @@ const romajiPatterns: { [key: string]: string[] } = {
   'と': ['to'],
   'だ': ['da'],
   'ぢ': ['di'],
-  'づ': ['du', 'zu'],
+  'づ': ['du'],
   'で': ['de'],
   'ど': ['do'],
   'な': ['na'],
@@ -103,60 +104,51 @@ const romajiPatterns: { [key: string]: string[] } = {
   'を': ['wo'],
   'ん': ['n', 'nn', 'xn'],
   
-  // 拗音（小さいゃゅょ）
-  'きゃ': ['kya'],
-  'きゅ': ['kyu'],
-  'きょ': ['kyo'],
-  'しゃ': ['sha', 'sya'],
-  'しゅ': ['shu', 'syu'],
-  'しょ': ['sho', 'syo'],
-  'ちゃ': ['cha', 'tya'],
-  'ちゅ': ['chu', 'tyu'],
-  'ちょ': ['cho', 'tyo'],
-  'にゃ': ['nya'],
-  'にゅ': ['nyu'],
-  'にょ': ['nyo'],
-  'ひゃ': ['hya'],
-  'ひゅ': ['hyu'],
-  'ひょ': ['hyo'],
-  'みゃ': ['mya'],
-  'みゅ': ['myu'],
-  'みょ': ['myo'],
-  'りゃ': ['rya'],
-  'りゅ': ['ryu'],
-  'りょ': ['ryo'],
-  'ぎゃ': ['gya'],
-  'ぎゅ': ['gyu'],
-  'ぎょ': ['gyo'],
-  'じゃ': ['ja', 'zya'],
-  'じゅ': ['ju', 'zyu'],
-  'じょ': ['jo', 'zyo'],
-  'びゃ': ['bya'],
-  'びゅ': ['byu'],
-  'びょ': ['byo'],
-  'ぴゃ': ['pya'],
-  'ぴゅ': ['pyu'],
-  'ぴょ': ['pyo'],
+  // 小文字（単体）
+  'ぁ': ['la', 'xa'],
+  'ぃ': ['li', 'xi'],
+  'ぅ': ['lu', 'xu'],
+  'ぇ': ['le', 'xe'],
+  'ぉ': ['lo', 'xo'],
+  'ゃ': ['lya', 'xya'],
+  'ゅ': ['lyu', 'xyu'],
+  'ょ': ['lyo', 'xyo'],
+  'っ': ['ltu', 'xtu'],
   
-  // 促音（っ）+ 子音
+  // 促音 + 子音の組み合わせ（一般的なローマ字表記）
   'っか': ['kka'],
   'っき': ['kki'],
   'っく': ['kku'],
   'っけ': ['kke'],
   'っこ': ['kko'],
+  'っが': ['gga'],
+  'っぎ': ['ggi'],
+  'っぐ': ['ggu'],
+  'っげ': ['gge'],
+  'っご': ['ggo'],
   'っさ': ['ssa'],
   'っし': ['sshi', 'ssi'],
   'っす': ['ssu'],
   'っせ': ['sse'],
   'っそ': ['sso'],
+  'っざ': ['zza'],
+  'っじ': ['jji', 'zzi'],
+  'っず': ['zzu'],
+  'っぜ': ['zze'],
+  'っぞ': ['zzo'],
   'った': ['tta'],
-  'っち': ['cchi', 'tti'],
+  'っち': ['tchi', 'tti'],
   'っつ': ['ttsu', 'ttu'],
   'って': ['tte'],
   'っと': ['tto'],
+  'っだ': ['dda'],
+  'っぢ': ['ddi'],
+  'っづ': ['ddu'],
+  'っで': ['dde'],
+  'っど': ['ddo'],
   'っは': ['hha'],
   'っひ': ['hhi'],
-  'っふ': ['ffu', 'hhu'],
+  'っふ': ['hhu', 'ffu'],
   'っへ': ['hhe'],
   'っほ': ['hho'],
   'っば': ['bba'],
@@ -183,8 +175,223 @@ const romajiPatterns: { [key: string]: string[] } = {
   'っれ': ['rre'],
   'っろ': ['rro'],
   'っわ': ['wwa'],
+  'っを': ['wwo'],
   
-  // その他
+  // 促音 + 拗音の組み合わせ（一般的なローマ字表記）
+  'っきゃ': ['kkya'],
+  'っきゅ': ['kkyu'],
+  'っきょ': ['kkyo'],
+  'っしゃ': ['ssha', 'ssya'],
+  'っしゅ': ['sshu', 'ssyu'],
+  'っしょ': ['ssho', 'ssyo'],
+  'っちゃ': ['tcha', 'ttya'],
+  'っちゅ': ['tchu', 'ttyu'],
+  'っちょ': ['tcho', 'ttyo'],
+  'っにゃ': ['nnya'],
+  'っにゅ': ['nnyu'],
+  'っにょ': ['nnyo'],
+  'っひゃ': ['hhya'],
+  'っひゅ': ['hhyu'],
+  'っひょ': ['hhyo'],
+  'っびゃ': ['bbya'],
+  'っびゅ': ['bbyu'],
+  'っびょ': ['bbyo'],
+  'っぴゃ': ['ppya'],
+  'っぴゅ': ['ppyu'],
+  'っぴょ': ['ppyo'],
+  'っみゃ': ['mmya'],
+  'っみゅ': ['mmyu'],
+  'っみょ': ['mmyo'],
+  'っりゃ': ['rrya'],
+  'っりゅ': ['rryu'],
+  'っりょ': ['rryo'],
+  
+  // W系
+  'うぁ': ['wha'],
+  'うぃ': ['wi', 'whi'],
+  'うぇ': ['we', 'whe'],
+  'うぉ': ['who'],
+  
+  // K系拗音
+  'きゃ': ['kya'],
+  'きぃ': ['kyi'],
+  'きゅ': ['kyu'],
+  'きぇ': ['kye'],
+  'きょ': ['kyo'],
+  
+  // G系拗音
+  'ぎゃ': ['gya'],
+  'ぎぃ': ['gyi'],
+  'ぎゅ': ['gyu'],
+  'ぎぇ': ['gye'],
+  'ぎょ': ['gyo'],
+  
+  // S系拗音
+  'しゃ': ['sha', 'sya'],
+  'しぃ': ['syi'],
+  'しゅ': ['shu', 'syu'],
+  'しぇ': ['she', 'sye'],
+  'しょ': ['sho', 'syo'],
+  
+  // Z/J系拗音
+  'じゃ': ['ja', 'zya', 'jya'],
+  'じぃ': ['zyi', 'jyi'],
+  'じゅ': ['ju', 'zyu', 'jyu'],
+  'じぇ': ['zye', 'jye'],
+  'じょ': ['jo', 'zyo', 'jyo'],
+  
+  // T/C系拗音
+  'ちゃ': ['cha', 'tya', 'cya'],
+  'ちぃ': ['tyi', 'cyi'],
+  'ちゅ': ['chu', 'tyu', 'cyu'],
+  'ちぇ': ['che', 'tye', 'cye'],
+  'ちょ': ['cho', 'tyo', 'cyo'],
+  
+  // TH系
+  'てゃ': ['tha'],
+  'てぃ': ['thi'],
+  'てゅ': ['thu'],
+  'てぇ': ['the'],
+  'てょ': ['tho'],
+  
+  // DH系
+  'でゃ': ['dha'],
+  'でぃ': ['dhi'],
+  'でゅ': ['dhu'],
+  'でぇ': ['dhe'],
+  'でょ': ['dho'],
+  
+  // N系拗音
+  'にゃ': ['nya'],
+  'にぃ': ['nyi'],
+  'にゅ': ['nyu'],
+  'にぇ': ['nye'],
+  'にょ': ['nyo'],
+  
+  // H系拗音
+  'ひゃ': ['hya'],
+  'ひぃ': ['hyi'],
+  'ひゅ': ['hyu'],
+  'ひぇ': ['hye'],
+  'ひょ': ['hyo'],
+  
+  // B系拗音
+  'びゃ': ['bya'],
+  'びぃ': ['byi'],
+  'びゅ': ['byu'],
+  'びぇ': ['bye'],
+  'びょ': ['byo'],
+  
+  // P系拗音
+  'ぴゃ': ['pya'],
+  'ぴぃ': ['pyi'],
+  'ぴゅ': ['pyu'],
+  'ぴぇ': ['pye'],
+  'ぴょ': ['pyo'],
+  
+  // M系拗音
+  'みゃ': ['mya'],
+  'みぃ': ['myi'],
+  'みゅ': ['myu'],
+  'みぇ': ['mye'],
+  'みょ': ['myo'],
+  
+  // R系拗音
+  'りゃ': ['rya'],
+  'りぃ': ['ryi'],
+  'りゅ': ['ryu'],
+  'りぇ': ['rye'],
+  'りょ': ['ryo'],
+  
+  // F系
+  'ふぁ': ['fa'],
+  'ふぃ': ['fi'],
+  'ふぇ': ['fe'],
+  'ふぉ': ['fo'],
+  
+  // V系（カタカナ）
+  'ヴァ': ['va'],
+  'ヴィ': ['vi'],
+  'ヴ': ['vu'],
+  'ヴェ': ['ve'],
+  'ヴォ': ['vo'],
+  
+  // カタカナ基本
+  'ア': ['a'],
+  'イ': ['i'],
+  'ウ': ['u'],
+  'エ': ['e'],
+  'オ': ['o'],
+  'カ': ['ka', 'ca'],
+  'キ': ['ki'],
+  'ク': ['ku', 'cu'],
+  'ケ': ['ke'],
+  'コ': ['ko', 'co'],
+  'ガ': ['ga'],
+  'ギ': ['gi'],
+  'グ': ['gu'],
+  'ゲ': ['ge'],
+  'ゴ': ['go'],
+  'サ': ['sa'],
+  'シ': ['shi', 'si', 'ci'],
+  'ス': ['su'],
+  'セ': ['se', 'ce'],
+  'ソ': ['so'],
+  'ザ': ['za'],
+  'ジ': ['ji', 'zi'],
+  'ズ': ['zu'],
+  'ゼ': ['ze'],
+  'ゾ': ['zo'],
+  'タ': ['ta'],
+  'チ': ['chi', 'ti'],
+  'ツ': ['tsu', 'tu'],
+  'テ': ['te'],
+  'ト': ['to'],
+  'ダ': ['da'],
+  'ヂ': ['di'],
+  'ヅ': ['du'],
+  'デ': ['de'],
+  'ド': ['do'],
+  'ナ': ['na'],
+  'ニ': ['ni'],
+  'ヌ': ['nu'],
+  'ネ': ['ne'],
+  'ノ': ['no'],
+  'ハ': ['ha'],
+  'ヒ': ['hi'],
+  'フ': ['fu', 'hu'],
+  'ヘ': ['he'],
+  'ホ': ['ho'],
+  'バ': ['ba'],
+  'ビ': ['bi'],
+  'ブ': ['bu'],
+  'ベ': ['be'],
+  'ボ': ['bo'],
+  'パ': ['pa'],
+  'ピ': ['pi'],
+  'プ': ['pu'],
+  'ペ': ['pe'],
+  'ポ': ['po'],
+  'マ': ['ma'],
+  'ミ': ['mi'],
+  'ム': ['mu'],
+  'メ': ['me'],
+  'モ': ['mo'],
+  'ヤ': ['ya'],
+  'ユ': ['yu'],
+  'ヨ': ['yo'],
+  'ラ': ['ra'],
+  'リ': ['ri'],
+  'ル': ['ru'],
+  'レ': ['re'],
+  'ロ': ['ro'],
+  'ワ': ['wa'],
+  'ヰ': ['wi'],
+  'ヱ': ['we'],
+  'ヲ': ['wo'],
+  'ン': ['n', 'nn', 'xn'],
+  
+  // 記号等
   'ー': ['-'],
   '、': [','],
   '。': ['.'],
@@ -196,12 +403,24 @@ const romajiPatterns: { [key: string]: string[] } = {
 
 // wanakakaを使用したローマ字変換（デフォルトはヘボン式）
 export function convertToRomaji(text: string, style: RomajiStyle = RomajiStyle.HEPBURN): string {
-  // wanakakaは基本的にヘボン式ベース
-  let romaji = toRomaji(text)
+  // カスタムパターンを優先してチェック
+  const segments = analyzeHiraganaSegments(text)
+  let result = ''
   
-  // 方式に応じて変換
+  for (const segment of segments) {
+    // カスタムパターンに存在するかチェック
+    if (romajiPatterns[segment]) {
+      // 最初のパターン（標準的な表記）を使用
+      result += romajiPatterns[segment][0]
+    } else {
+      // wanakakaにフォールバック
+      result += toRomaji(segment)
+    }
+  }
+  
+  // 方式に応じて変換（訓令式・日本式）
   if (style === RomajiStyle.KUNREI || style === RomajiStyle.NIHON) {
-    romaji = romaji
+    result = result
       .replace(/shi/g, 'si')
       .replace(/chi/g, 'ti')
       .replace(/tsu/g, 'tu')
@@ -218,10 +437,10 @@ export function convertToRomaji(text: string, style: RomajiStyle = RomajiStyle.H
       .replace(/jo/g, 'zyo')
   }
   
-  return romaji
+  return result
 }
 
-// 包括的なローマ字検証システム（表記ゆれ対応）
+// 包括的なローマ字検証システム（表記ゆれ対応・使用パターン追跡）
 export function validateRomajiInputWithPatterns(targetText: string, userInput: string): {
   isValid: boolean
   correctLength: number
@@ -229,12 +448,16 @@ export function validateRomajiInputWithPatterns(targetText: string, userInput: s
   suggestions: string[]
   isComplete: boolean
   matchedPattern?: string
+  usedPatterns: string[]  // 実際に使用されたパターンの配列
+  displayRomaji: string   // 表示用ローマ字（実際の入力に基づく）
 } {
   const segments = analyzeHiraganaSegments(targetText)
   let inputPosition = 0
   let correctLength = 0
   let currentSegmentIndex = 0
   let lastMatchedPattern: string | undefined
+  let usedPatterns: string[] = []
+  let displayRomaji = ''
   
   while (inputPosition < userInput.length && currentSegmentIndex < segments.length) {
     const segment = segments[currentSegmentIndex]
@@ -257,11 +480,15 @@ export function validateRomajiInputWithPatterns(targetText: string, userInput: s
       if (bestMatch.matchLength === bestMatch.pattern.length) {
         // 完全一致
         correctLength += bestMatch.matchLength
+        usedPatterns.push(bestMatch.pattern)
+        displayRomaji += bestMatch.pattern
         inputPosition += bestMatch.matchLength
         currentSegmentIndex++
       } else if (bestMatch.pattern.startsWith(userInput.slice(inputPosition))) {
         // 部分一致（途中まで正しい）
         correctLength = inputPosition + bestMatch.matchLength
+        const partialInput = userInput.slice(inputPosition, inputPosition + bestMatch.matchLength)
+        displayRomaji += partialInput
         break
       } else {
         // 不一致
@@ -271,6 +498,13 @@ export function validateRomajiInputWithPatterns(targetText: string, userInput: s
       // どのパターンにも一致しない
       break
     }
+  }
+  
+  // 残りのセグメントのデフォルトローマ字を追加（まだ入力されていない部分）
+  for (let i = currentSegmentIndex; i < segments.length; i++) {
+    const segment = segments[i]
+    const patterns = romajiPatterns[segment] || [segment]
+    displayRomaji += patterns[0] // 最初のパターン（通常の表記）を使用
   }
   
   const isComplete = currentSegmentIndex >= segments.length && inputPosition >= userInput.length
@@ -299,7 +533,9 @@ export function validateRomajiInputWithPatterns(targetText: string, userInput: s
     nextExpectedChars,
     suggestions: nextExpectedChars,
     isComplete,
-    matchedPattern: lastMatchedPattern
+    matchedPattern: lastMatchedPattern,
+    usedPatterns,
+    displayRomaji
   }
 }
 
@@ -311,22 +547,21 @@ function analyzeHiraganaSegments(text: string): string[] {
   while (i < text.length) {
     const char = text[i]
     
-    // 拗音や促音の組み合わせをチェック
-    if (i < text.length - 1) {
-      const twoChar = text.slice(i, i + 2)
-      if (romajiPatterns[twoChar]) {
-        segments.push(twoChar)
-        i += 2
+    // 3文字の組み合わせをチェック（促音+拗音など）
+    if (i < text.length - 2) {
+      const threeChar = text.slice(i, i + 3)
+      if (romajiPatterns[threeChar]) {
+        segments.push(threeChar)
+        i += 3
         continue
       }
     }
     
-    // 促音の特別処理
-    if (char === 'っ' && i < text.length - 1) {
-      const nextChar = text[i + 1]
-      const combination = char + nextChar
-      if (romajiPatterns[combination]) {
-        segments.push(combination)
+    // 2文字の組み合わせをチェック（拗音や促音など）
+    if (i < text.length - 1) {
+      const twoChar = text.slice(i, i + 2)
+      if (romajiPatterns[twoChar]) {
+        segments.push(twoChar)
         i += 2
         continue
       }

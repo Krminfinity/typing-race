@@ -199,6 +199,13 @@ app.prepare().then(() => {
         finishTime: null,
         currentWordIndex: 0,
         fixedRomajiPatterns: [], // 生徒固有のローマ字パターンを保存
+        stats: {
+          wpm: 0,
+          accuracy: 100,
+          mistakes: 0,
+          totalChars: 0,
+          completedWords: 0
+        },
         typingStats: {
           totalKeystrokes: 0,
           errorCount: 0,
@@ -338,6 +345,16 @@ app.prepare().then(() => {
       participant.wpm = data.wpm
       participant.accuracy = data.accuracy
 
+      // 教師画面用の stats オブジェクトを更新
+      if (!participant.stats) {
+        participant.stats = {}
+      }
+      participant.stats.wpm = data.wpm || 0
+      participant.stats.accuracy = data.accuracy || 100
+      participant.stats.mistakes = participant.typingStats?.errorCount || 0
+      participant.stats.totalChars = participant.typingStats?.totalKeystrokes || 0
+      participant.stats.completedWords = data.progress ? Math.floor((data.progress / 100) * (room.wordList?.length || 0)) : 0
+
       // 単語モードの場合は単語インデックスも更新
       if (room.mode === 'word' && data.currentWordIndex !== undefined) {
         participant.currentWordIndex = data.currentWordIndex
@@ -419,13 +436,25 @@ app.prepare().then(() => {
           data.stats.correctKeystrokes || 0
         )
         
+        // 基本統計を更新
         participant.accuracy = data.stats.accuracy || 100
         participant.wpm = data.stats.wpm || 0
+        
+        // 教師画面用の stats オブジェクトを更新
+        if (!participant.stats) {
+          participant.stats = {}
+        }
+        participant.stats.wpm = data.stats.wpm || 0
+        participant.stats.accuracy = data.stats.accuracy || 100
+        participant.stats.mistakes = data.stats.errorCount || 0
+        participant.stats.totalChars = data.stats.totalKeystrokes || 0
+        participant.stats.completedWords = data.progress ? Math.floor((data.progress / 100) * (room.wordList?.length || 0)) : 0
         
         console.log(`After update for ${participant.name}:`, {
           totalKeystrokes: participant.typingStats.totalKeystrokes,
           errorCount: participant.typingStats.errorCount,
-          correctKeystrokes: participant.typingStats.correctKeystrokes
+          correctKeystrokes: participant.typingStats.correctKeystrokes,
+          stats: participant.stats
         })
         
         // 完了時の最終統計を記録

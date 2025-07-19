@@ -140,6 +140,20 @@ class SocketService {
     this.socket.emit('word-completed', { pin, currentWordIndex })
   }
 
+  finishRace(pin: string, finalStats: {
+    wpm: number
+    accuracy: number
+    mistakes: number
+    totalChars: number
+    completedWords: number
+    timeElapsed: number
+    finishTime: number
+  }) {
+    if (!this.socket) return
+    console.log('Sending final race completion stats:', { pin, finalStats })
+    this.socket.emit('race-finished', { pin, finalStats })
+  }
+
   onRaceStarted(callback: (data: { 
     text?: string
     startTime: number

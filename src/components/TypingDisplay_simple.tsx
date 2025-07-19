@@ -7,6 +7,7 @@ interface TypingDisplayProps {
   japaneseText: string
   userInput: string
   isActive: boolean
+  onComplete?: () => void // 完了コールバック
 }
 
 interface RomajiChar {
@@ -15,40 +16,39 @@ interface RomajiChar {
   index: number
 }
 
-export default function TypingDisplay({ japaneseText, userInput, isActive }: TypingDisplayProps) {
+export default function TypingDisplay({ japaneseText, userInput, isActive, onComplete }: TypingDisplayProps) {
   const [romajiChars, setRomajiChars] = useState<RomajiChar[]>([])
-  const [displayRomaji, setDisplayRomaji] = useState<string>('')
-  const [usedPatterns, setUsedPatterns] = useState<string[]>([])
 
-  // ローマ字の状態を計算する関数（実際の入力パターンに基づく）
+  // ローマ字の状態を計算する関数（改良版）
   const calculateRomajiStatus = (japanese: string, input: string) => {
-    // validateRomajiInputWithPatternsを使用して正確な進捗と実際の表示ローマ字を取得
+    // validateRomajiInputWithPatternsを使用して正確な進捗を取得
     const validation = validateRomajiInputWithPatterns(japanese, input)
-    
-    // 実際にユーザーが入力したパターンに基づくローマ字表示を使用
-    const actualRomaji = validation.displayRomaji
-    setDisplayRomaji(actualRomaji)
-    setUsedPatterns(validation.usedPatterns)
+    const baseRomaji = convertToRomaji(japanese)
     
     const chars: RomajiChar[] = []
     
     // 各文字の状態を設定
-    for (let i = 0; i < actualRomaji.length; i++) {
+    for (let i = 0; i < baseRomaji.length; i++) {
       let status: 'correct' | 'incorrect' | 'pending' | 'current' = 'pending'
       
       if (i < validation.correctLength) {
         status = 'correct'
       } else if (i < input.length) {
         status = 'incorrect'
-      } else if (i === input.length && !validation.isComplete) {
+      } else if (i === input.length) {
         status = 'current'
       }
       
       chars.push({
-        char: actualRomaji[i],
+        char: baseRomaji[i],
         status,
         index: i
       })
+    }
+    
+    // 完了チェック
+    if (validation.isComplete && onComplete) {
+      setTimeout(() => onComplete(), 100) // 少し遅延して視覚的フィードバックを確保
     }
     
     return chars
@@ -59,7 +59,7 @@ export default function TypingDisplay({ japaneseText, userInput, isActive }: Typ
       const newRomajiChars = calculateRomajiStatus(japaneseText, userInput)
       setRomajiChars(newRomajiChars)
     }
-  }, [japaneseText, userInput, isActive])
+  }, [japaneseText, userInput, isActive, onComplete])
 
   const getCharStyle = (status: string) => {
     switch (status) {
@@ -80,6 +80,7 @@ export default function TypingDisplay({ japaneseText, userInput, isActive }: Typ
 
   return (
     <div className="bg-gradient-to-br from-blue-50 to-indigo-100 p-8 rounded-xl shadow-lg border-2 border-blue-300">
+      {/* 単語モード表示（シンプル版） */}
       <div className="text-center space-y-6">
         {/* 日本語表示 */}
         <div className="text-6xl font-bold text-gray-800 mb-6 tracking-wide">
@@ -96,6 +97,28 @@ export default function TypingDisplay({ japaneseText, userInput, isActive }: Typ
               {char.char}
             </span>
           ))}
+        </div>
+        
+        {/* シンプルな進捗表示 */}
+        <div className="flex justify-center items-center space-x-8">
+          <div className="flex items-center space-x-2">
+            <div className="w-4 h-4 bg-green-500 rounded-full"></div>
+            <span className="text-green-700 font-bold text-lg">
+              正解: {romajiChars.filter(c => c.status === 'correct').length}
+            </span>
+          </div>
+          <div className="flex items-center space-x-2">
+            <div className="w-4 h-4 bg-red-500 rounded-full animate-pulse"></div>
+            <span className="text-red-700 font-bold text-lg">
+              ミス: {romajiChars.filter(c => c.status === 'incorrect').length}
+            </span>
+          </div>
+          <div className="flex items-center space-x-2">
+            <div className="w-4 h-4 bg-blue-500 rounded-full"></div>
+            <span className="text-blue-700 font-bold text-lg">
+              残り: {romajiChars.filter(c => c.status === 'pending').length}
+            </span>
+          </div>
         </div>
       </div>
     </div>

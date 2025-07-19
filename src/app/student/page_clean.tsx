@@ -21,13 +21,6 @@ function StudentPageContent() {
   const [raceFinished, setRaceFinished] = useState(false)
   const [error, setError] = useState('')
   const [startTime, setStartTime] = useState<number | null>(null)
-  const [finishTime, setFinishTime] = useState<number | null>(null)
-  
-  // 詳細統計を追跡
-  const [totalKeystrokes, setTotalKeystrokes] = useState(0)
-  const [totalMistakes, setTotalMistakes] = useState(0)
-  const [correctKeystrokes, setCorrectKeystrokes] = useState(0)
-  const [completedWords, setCompletedWords] = useState(0)
 
   useEffect(() => {
     if (!pin || !studentName) {
@@ -59,12 +52,6 @@ function StudentPageContent() {
         setCurrentWordIndex(0)
         setRaceFinished(false)
         setUserInput('')
-        
-        // レース開始時に即座にフォーカスを設定
-        setTimeout(() => {
-          document.body.focus()
-          console.log('Race started - body focused automatically')
-        }, 100)
       }
     })
 
@@ -76,13 +63,6 @@ function StudentPageContent() {
       setUserInput('')
       setCurrentWordIndex(0)
       setStartTime(null)
-      setFinishTime(null)
-      
-      // 統計をリセット
-      setTotalKeystrokes(0)
-      setTotalMistakes(0)
-      setCorrectKeystrokes(0)
-      setCompletedWords(0)
     })
 
     // Listen for errors
@@ -98,7 +78,7 @@ function StudentPageContent() {
 
   // 統計計算
   const calculateStats = useCallback(() => {
-    if (!startTime) return { progress: 0, wpm: 0, accuracy: 100, mistakes: 0, totalChars: 0, completedWords: 0 }
+    if (!startTime) return { progress: 0, wpm: 0, accuracy: 100 }
     
     let progress = 0
     let accuracy = 100
@@ -106,155 +86,67 @@ function StudentPageContent() {
     if (wordList.length > 0) {
       progress = (currentWordIndex / wordList.length) * 100
       
-      // 正確率を計算：正解キーストローク数 / 総キーストローク数 * 100
-      if (totalKeystrokes > 0) {
-        accuracy = (correctKeystrokes / totalKeystrokes) * 100
-        // 正確率は100%を超えないように制限
-        accuracy = Math.min(accuracy, 100)
+      // 現在の単語の正確性を計算
+      if (currentWordIndex < wordList.length) {
+        const currentWord = wordList[currentWordIndex]
+        const targetText = currentWord.hiragana || currentWord.word || ''
+        
+        if (targetText.match(/[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]/)) {
+          // 日本語の場合、ローマ字検証を使用
+          const validation = validateRomajiInputWithPatterns(targetText, userInput)
+          if (userInput.length > 0) {
+            accuracy = (validation.correctLength / userInput.length) * 100
+          }
+        } else {
+          // 英語やローマ字の場合
+          let correctChars = 0
+          for (let i = 0; i < userInput.length; i++) {
+            if (userInput[i] === targetText[i]) {
+              correctChars++
+            }
+          }
+          accuracy = userInput.length > 0 ? (correctChars / userInput.length) * 100 : 100
+        }
       }
     }
     
-    // Calculate WPM based on completed words and time elapsed
-    let timeElapsed = 0
-    let wpm = 0
+    // Calculate WPM
+    const timeElapsed = (Date.now() - startTime) / 1000 / 60 // minutes
+    const wordsTyped = userInput.length / 5 // assuming 5 characters per word
+    const wpm = timeElapsed > 0 ? wordsTyped / timeElapsed : 0
     
-    if (startTime) {
-      if (raceFinished && finishTime) {
-        // レース完了時は完了時刻を使用
-        timeElapsed = (finishTime - startTime) / 1000 / 60 // minutes
-      } else {
-        // レース継続中は現在時刻を使用
-        timeElapsed = (Date.now() - startTime) / 1000 / 60 // minutes
-      }
-      
-      if (timeElapsed > 0) {
-        wpm = completedWords / timeElapsed
-      }
-    }
+    return { progress, wpm, accuracy }
+  }, [startTime, wordList, currentWordIndex, userInput])
 
-    return { 
-      progress, 
-      wpm, 
-      accuracy, 
-      mistakes: totalMistakes,
-      totalChars: totalKeystrokes,
-      completedWords
-    }
-  }, [startTime, wordList, currentWordIndex, totalKeystrokes, correctKeystrokes, totalMistakes, completedWords])
-
-  // 統計の更新とサーバーへの送信（完了した単語のみ、または定期的に）
+  // 統計の更新とサーバーへの送信
   useEffect(() => {
     if (room && raceStarted && startTime) {
       const stats = calculateStats()
-      
-      // デバッグ: 統計データをコンソールに出力
-      console.log('Student stats calculation:', {
-        stats,
-        totalKeystrokes,
-        correctKeystrokes,
-        totalMistakes,
-        userInput,
-        currentWordIndex,
-        timeElapsed: startTime ? (Date.now() - startTime) / 1000 / 60 : 0
-      })
-      
-      // 統計が有効な値を持つ場合のみ送信
-      if (stats.wpm >= 0 && stats.accuracy >= 0) {
-        // 詳細な統計データも含めて送信
-        socketService.updateDetailedStats(room.id, {
-          wpm: stats.wpm,
-          accuracy: stats.accuracy,
-          errorCount: stats.mistakes,
-          totalKeystrokes: totalKeystrokes,
-          correctKeystrokes: correctKeystrokes
-        }, stats.progress)
-        
-        // 従来の進捗更新も維持
-        socketService.updateProgress(room.id, stats.progress, stats.wpm, stats.accuracy, currentWordIndex)
-      }
+      socketService.updateProgress(room.id, stats.progress, stats.wpm, stats.accuracy)
     }
-  }, [completedWords, room, calculateStats, raceStarted, startTime, currentWordIndex, totalKeystrokes, correctKeystrokes]) // completedWordsの変更時に送信
-
-  // 定期的な統計更新（2秒ごと）
-  useEffect(() => {
-    if (!room || !raceStarted || !startTime) return
-
-    const interval = setInterval(() => {
-      const stats = calculateStats()
-      
-      if (stats.wpm >= 0 && stats.accuracy >= 0) {
-        socketService.updateDetailedStats(room.id, {
-          wpm: stats.wpm,
-          accuracy: stats.accuracy,
-          errorCount: stats.mistakes,
-          totalKeystrokes: totalKeystrokes,
-          correctKeystrokes: correctKeystrokes
-        }, stats.progress)
-        
-        socketService.updateProgress(room.id, stats.progress, stats.wpm, stats.accuracy, currentWordIndex)
-      }
-    }, 2000) // 2秒ごと
-
-    return () => clearInterval(interval)
-  }, [room, raceStarted, startTime, calculateStats, totalKeystrokes, correctKeystrokes, currentWordIndex])
-
-  // レース完了時に最終統計を送信
-  useEffect(() => {
-    if (raceFinished && startTime && room) {
-      const finalStats = calculateStats()
-      const timeElapsed = (Date.now() - startTime) / 1000 / 60 // minutes
-      
-      // 詳細な最終統計を送信
-      socketService.finishRace(room.id, {
-        wpm: finalStats.wpm,
-        accuracy: finalStats.accuracy,
-        mistakes: finalStats.mistakes,
-        totalChars: finalStats.totalChars,
-        completedWords: finalStats.completedWords,
-        timeElapsed: timeElapsed,
-        finishTime: Date.now()
-      })
-      
-      console.log('Final stats sent:', finalStats)
-    }
-  }, [raceFinished, startTime, room, calculateStats])
+  }, [userInput, room, calculateStats, raceStarted, startTime])
 
   // シンプルなキーボード入力処理
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     if (!raceStarted || raceFinished) return
     
-    // システムキーやショートカットキーを除外（Vimモード対策でより厳格に）
+    // システムキーやショートカットキーを除外
     if (e.ctrlKey || e.altKey || e.metaKey) return
     if (e.key === 'F5' || e.key === 'F12') return
     if (e.key === 'Tab' || e.key === 'Escape') return
     
-    // Vimライクなモードコマンドを無効化
-    if (e.key === 'i' || e.key === 'I' || e.key === 'a' || e.key === 'A' || e.key === 'o' || e.key === 'O') {
-      // 通常の文字として処理するため、preventDefault()を呼ぶ
-    }
-    
     e.preventDefault()
-    e.stopPropagation()
     
     // Backspaceの処理
     if (e.key === 'Backspace') {
-      setUserInput(prev => {
-        if (prev.length > 0) {
-          // バックスペースはキーストロークには含めない
-          return prev.slice(0, -1)
-        }
-        return prev
-      })
+      setUserInput(prev => prev.slice(0, -1))
       return
     }
 
-    // 通常の文字入力の処理（ローマ字入力に必要な文字をすべて許可）
-    if (e.key.length === 1 && e.key.match(/[a-zA-Z0-9\-',.!?;: ]/)) {
+    // 通常の文字入力の処理（半角英数字のみ）
+    if (e.key.length === 1 && e.key.match(/[a-zA-Z0-9]/)) {
       setUserInput(prev => {
         const newInput = prev + e.key
-        
-        // キーストローク数をカウント（文字が実際に追加された時のみ）
-        setTotalKeystrokes(prevTotal => prevTotal + 1)
         
         // 単語完了チェック
         if (currentWordIndex < wordList.length) {
@@ -264,21 +156,8 @@ function StudentPageContent() {
           if (targetText.match(/[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]/)) {
             // 日本語の場合、ローマ字検証
             const validation = validateRomajiInputWithPatterns(targetText, newInput)
-            
-            // 現在の文字が正しいかチェック
-            const currentCharCorrect = validation.correctLength >= newInput.length
-            
-            if (currentCharCorrect) {
-              // この文字が正しい場合のみ正解数に加算
-              setCorrectKeystrokes(prevCorrect => prevCorrect + 1)
-            } else {
-              // この文字が間違っている場合はミス数に加算
-              setTotalMistakes(prevMistakes => prevMistakes + 1)
-            }
-            
             if (validation.isComplete) {
               // 単語完了
-              setCompletedWords(prev => prev + 1)
               setTimeout(() => {
                 const nextIndex = currentWordIndex + 1
                 setCurrentWordIndex(nextIndex)
@@ -286,23 +165,12 @@ function StudentPageContent() {
                 
                 if (nextIndex >= wordList.length) {
                   setRaceFinished(true)
-                  setFinishTime(Date.now())
                 }
               }, 100)
             }
           } else {
             // 英語の場合、完全一致
-            const isCorrectChar = newInput.length <= targetText.length && 
-                                 newInput[newInput.length - 1] === targetText[newInput.length - 1]
-            
-            if (isCorrectChar) {
-              setCorrectKeystrokes(prevCorrect => prevCorrect + 1)
-            } else {
-              setTotalMistakes(prevMistakes => prevMistakes + 1)
-            }
-            
             if (newInput === targetText) {
-              setCompletedWords(prev => prev + 1)
               setTimeout(() => {
                 const nextIndex = currentWordIndex + 1
                 setCurrentWordIndex(nextIndex)
@@ -310,7 +178,6 @@ function StudentPageContent() {
                 
                 if (nextIndex >= wordList.length) {
                   setRaceFinished(true)
-                  setFinishTime(Date.now())
                 }
               }, 100)
             }
@@ -325,55 +192,11 @@ function StudentPageContent() {
   useEffect(() => {
     if (!raceStarted || raceFinished) return
 
-    // bodyにtabIndexを設定してフォーカス可能にする
-    document.body.tabIndex = -1
-    document.body.style.outline = 'none'
-    
-    // Vimモード対策のためのスタイル設定
-    document.body.style.userSelect = 'none'
-    document.body.style.webkitUserSelect = 'none'
-
-    // keydownイベントをcaptureフェーズで追加（より早い段階でキャッチ）
-    document.addEventListener('keydown', handleKeyDown, true)
-    
-    // フォーカスを確実にページに当てる
-    const focusPage = () => {
-      // bodyにフォーカスを移動
-      document.body.focus()
-      console.log('Body focused, activeElement:', document.activeElement?.tagName)
-    }
-    
-    // 即座にフォーカス（複数回試行）
-    focusPage()
-    setTimeout(focusPage, 50)
-    setTimeout(focusPage, 100)
-    setTimeout(focusPage, 200)
-    
-    // 定期的にフォーカスを確認（何かの要素にフォーカスが移動した場合に備えて）
-    const focusInterval = setInterval(() => {
-      if (document.activeElement !== document.body) {
-        focusPage()
-      }
-    }, 500) // より頻繁にチェック
-    
-    // クリック時にもフォーカスを戻す
-    const handleClick = (e: MouseEvent) => {
-      e.preventDefault()
-      setTimeout(focusPage, 0)
-    }
-    const handleMouseDown = (e: MouseEvent) => {
-      e.preventDefault()
-      focusPage()
-    }
-    
-    document.addEventListener('click', handleClick, true)
-    document.addEventListener('mousedown', handleMouseDown, true)
+    // ページ全体にイベントリスナーを追加
+    document.addEventListener('keydown', handleKeyDown)
     
     return () => {
-      document.removeEventListener('keydown', handleKeyDown, true)
-      document.removeEventListener('click', handleClick, true)
-      document.removeEventListener('mousedown', handleMouseDown, true)
-      clearInterval(focusInterval)
+      document.removeEventListener('keydown', handleKeyDown)
     }
   }, [raceStarted, raceFinished, handleKeyDown])
 
@@ -407,29 +230,7 @@ function StudentPageContent() {
   }
 
   return (
-    <div 
-      className="min-h-screen bg-gradient-to-br from-green-50 to-blue-100 focus:outline-none" 
-      tabIndex={0}
-      style={{ 
-        outline: 'none',
-        userSelect: 'none',
-        WebkitUserSelect: 'none'
-      }}
-      onFocus={() => console.log('Page focused')}
-      onClick={() => {
-        // クリック時にフォーカスを確実にする
-        if (raceStarted && !raceFinished) {
-          document.body.focus()
-        }
-      }}
-      onKeyDown={(e) => {
-        // divレベルでもVimモードコマンドを無効化
-        if (raceStarted && !raceFinished) {
-          e.preventDefault()
-          e.stopPropagation()
-        }
-      }}
-    >
+    <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-100 focus:outline-none" tabIndex={0}>
       <div className="container mx-auto px-4 py-8">
         <div className="bg-white rounded-xl shadow-xl p-6 mb-6">
           <div className="flex justify-between items-center mb-4">
@@ -499,8 +300,14 @@ function StudentPageContent() {
               {raceStarted && !raceFinished && currentWordIndex < wordList.length && (
                 <div className="space-y-6">
                   <div className="text-center">
-                    <div className="text-lg font-semibold text-gray-700 mb-4">
+                    <div className="text-lg font-semibold text-gray-700 mb-2">
                       単語 {currentWordIndex + 1} / {wordList.length}
+                    </div>
+                    
+                    <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                      <p className="text-blue-700 text-sm">
+                        💡 キーボードの半角英数字（ローマ字）で入力してください
+                      </p>
                     </div>
                   </div>
               
