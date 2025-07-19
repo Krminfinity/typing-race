@@ -155,6 +155,7 @@ app.prepare().then(() => {
       const pin = generatePIN()
       const room = {
         id: pin,
+        pin: pin, // PINプロパティを追加
         teacherId: socket.id,
         text: 'これは教室でのタイピング競争のテストです。みんなで頑張って正確に早く入力しましょう。',
         status: 'waiting',

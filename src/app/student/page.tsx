@@ -26,7 +26,7 @@ function StudentPageContent() {
   const [room, setRoom] = useState<Room | null>(null)
   const [participants, setParticipants] = useState<Participant[]>([])
   const [raceText, setRaceText] = useState('')
-  const [raceMode, setRaceMode] = useState<'sentence' | 'word'>('sentence')
+  const [raceMode, setRaceMode] = useState<'sentence' | 'word'>('word') // 常に単語モード
   const [wordList, setWordList] = useState<Array<{ hiragana?: string, word?: string, romaji: string[] }>>([])
   const [currentWordIndex, setCurrentWordIndex] = useState(0)
   const [textType, setTextType] = useState<string>('')
@@ -90,24 +90,6 @@ function StudentPageContent() {
           }
         }
       }
-    } else {
-      // 文章モードの統計計算
-      if (textType === 'japanese' || (!textType && /[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]/.test(raceText))) {
-        const validation = validateRomajiInputWithPatterns(raceText, userInput)
-        const romajiExpected = convertToRomaji(raceText)
-        progress = raceText.length > 0 ? (validation.correctLength / romajiExpected.length) * 100 : 0
-        accuracy = userInput.length > 0 ? (validation.correctLength / userInput.length) * 100 : 100
-      } else {
-        // 英語やローマ字テキストの場合
-        progress = raceText.length > 0 ? (userInput.length / raceText.length) * 100 : 0
-        let correctChars = 0
-        for (let i = 0; i < userInput.length; i++) {
-          if (userInput[i] === raceText[i]) {
-            correctChars++
-          }
-        }
-        accuracy = userInput.length > 0 ? (correctChars / userInput.length) * 100 : 100
-      }
     }
     
     // Calculate WPM
@@ -135,7 +117,7 @@ function StudentPageContent() {
     // Listen for race start
     socketService.onRaceStarted((data) => {
       console.log('Race started event received:', data)
-      setRaceMode(data.mode || 'sentence')
+      setRaceMode('word') // 常に単語モード
       setTextType(data.textType || '')
       setRaceStarted(true)
       setRaceFinished(false)
@@ -148,16 +130,12 @@ function StudentPageContent() {
       setCurrentAccuracy(100)
       setCurrentWPM(0)
       
-      if (data.mode === 'word' && data.wordList) {
+      // 常に単語モード
+      if (data.wordList) {
         console.log('Setting up word mode with', data.wordList.length, 'words')
         setWordList(data.wordList)
         setCurrentWordIndex(0)
         setRaceText('')
-      } else {
-        console.log('Setting up sentence mode with text:', data.text?.substring(0, 50) + '...')
-        setRaceText(data.text || '')
-        setWordList([])
-        setCurrentWordIndex(0)
       }
     })
 
@@ -200,46 +178,52 @@ function StudentPageContent() {
   }, [pin, studentName, router])
 
   // ページ全体でのキーボード入力を受け取る
+  const handleKeyDown = useCallback((e: KeyboardEvent) => {
+    // システムキーやショートカットキーを除外
+    if (e.ctrlKey || e.altKey || e.metaKey) return
+    if (e.key === 'F5' || e.key === 'F12') return
+    if (e.key === 'Tab' || e.key === 'Escape') return
+    
+    e.preventDefault()
+    
+    // IME制御機能を併用
+    const filtered = filterKeyboardInput(e)
+    if (!filtered) {
+      return
+    }
+    
+    // 日本語入力を検出して警告
+    const japaneseDetection = detectJapaneseInput(e)
+    if (japaneseDetection.hasJapanese) {
+      console.warn('Japanese input detected and blocked')
+      return
+    }
+
+    // Backspaceの処理
+    if (e.key === 'Backspace') {
+      setUserInput(prev => {
+        if (prev.length > 0) {
+          return prev.slice(0, -1)
+        }
+        return prev
+      })
+      return
+    }
+
+    // 通常の文字入力の処理
+    if (e.key.length === 1) {
+      const newChar = e.key
+      setUserInput(prev => {
+        const newInput = prev + newChar
+        // handleInputChangeの処理を直接実行
+        setTimeout(() => handleInputChange(newInput), 0)
+        return newInput
+      })
+    }
+  }, [raceStarted, raceFinished])
+
   useEffect(() => {
     if (!raceStarted || raceFinished) return
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // システムキーやショートカットキーを除外
-      if (e.ctrlKey || e.altKey || e.metaKey) return
-      if (e.key === 'F5' || e.key === 'F12') return
-      if (e.key === 'Tab' || e.key === 'Escape') return
-      
-      e.preventDefault()
-      
-      // IME制御機能を併用
-      const filtered = filterKeyboardInput(e)
-      if (!filtered) {
-        return
-      }
-      
-      // 日本語入力を検出して警告
-      const japaneseDetection = detectJapaneseInput(e)
-      if (japaneseDetection.hasJapanese) {
-        console.warn('Japanese input detected and blocked')
-        return
-      }
-
-      // Backspaceの処理
-      if (e.key === 'Backspace') {
-        if (userInput.length > 0) {
-          setUserInput(prev => prev.slice(0, -1))
-        }
-        return
-      }
-
-      // 通常の文字入力の処理
-      if (e.key.length === 1) {
-        const newChar = e.key
-        const newInput = userInput + newChar
-        
-        handleInputChange(newInput)
-      }
-    }
 
     // ページ全体にイベントリスナーを追加
     document.addEventListener('keydown', handleKeyDown)
@@ -252,7 +236,7 @@ function StudentPageContent() {
     return () => {
       document.removeEventListener('keydown', handleKeyDown)
     }
-  }, [raceStarted, raceFinished, userInput])
+  }, [raceStarted, raceFinished, handleKeyDown])
 
   // 究極の入力制限システムの初期化（ページ全体に適用）
   useEffect(() => {
@@ -303,7 +287,7 @@ function StudentPageContent() {
     }
   }, [userInput, room, calculateStats, raceStarted, startTime, raceMode])
 
-  const handleInputChange = (newInput: string) => {
+  const handleInputChange = useCallback((newInput: string) => {
     if (!raceStarted || raceFinished) return
     
     setLastKeyPressed(newInput[newInput.length - 1] || '')
@@ -371,51 +355,8 @@ function StudentPageContent() {
           }
         }
       }
-    } else {
-      // 文章モード処理
-      if (textType === 'japanese' || (!textType && /[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]/.test(raceText))) {
-        // 日本語の場合、ローマ字検証を使用
-        const validation = validateRomajiInputWithPatterns(raceText, newInput)
-        
-        // 詳細統計の更新（ミスも含めて）
-        if (typingStats && room) {
-          const stats = typingStats.updateWithKeyInput(raceText, newInput, lastKeyPressed)
-          setCurrentAccuracy(stats.accuracy)
-          setCurrentWPM(stats.wpm)
-          
-          const romajiExpected = convertToRomaji(raceText)
-          const progress = raceText.length > 0 ? (validation.correctLength / romajiExpected.length) * 100 : 0
-          
-          socketService.updateDetailedStats(room.id, {
-            totalKeystrokes: stats.totalKeystrokes,
-            errorCount: stats.errorCount,
-            correctKeystrokes: stats.correctKeystrokes,
-            accuracy: stats.accuracy,
-            wpm: stats.wpm,
-            finished: validation.isComplete
-          }, Math.min(progress, 100))
-        }
-        
-        // 完了チェック（正確に入力された場合のみ）
-        if (validation.isComplete && !raceFinished) {
-          setRaceFinished(true)
-        }
-      } else {
-        // 英語やローマ字の場合
-        // 詳細統計の更新
-        if (typingStats) {
-          const stats = typingStats.updateWithKeyInput(raceText, newInput, lastKeyPressed)
-          setCurrentAccuracy(stats.accuracy)
-          setCurrentWPM(stats.wpm)
-        }
-        
-        // 完了チェック（正確に入力された場合のみ）
-        if (newInput === raceText && !raceFinished) {
-          setRaceFinished(true)
-        }
-      }
     }
-  }
+  }, [raceStarted, raceFinished, raceMode, currentWordIndex, wordList, textType, typingStats, room, lastKeyPressed])
 
   const handleBackToHome = () => {
     router.push('/')
@@ -560,16 +501,6 @@ function StudentPageContent() {
                 japaneseText={wordList[currentWordIndex].hiragana || wordList[currentWordIndex].word || ''}
                 userInput={userInput}
                 isActive={raceStarted && !raceFinished}
-                mode="word"
-              />
-            )}
-            
-            {raceMode === 'sentence' && raceText && (
-              <TypingDisplay
-                japaneseText={raceText}
-                userInput={userInput}
-                isActive={raceStarted && !raceFinished}
-                mode="sentence"
               />
             )}
             

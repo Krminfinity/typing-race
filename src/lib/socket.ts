@@ -9,6 +9,13 @@ export interface Participant {
   finished: boolean
   finishTime?: number
   currentWordIndex?: number
+  stats?: {
+    wpm?: number
+    accuracy?: number
+    mistakes?: number
+    completedWords?: number
+    totalChars?: number
+  }
   typingStats?: {
     totalKeystrokes: number
     errorCount: number
@@ -24,6 +31,7 @@ export interface Participant {
 
 export interface Room {
   id: string
+  pin: string // PINを必須プロパティに変更
   teacherId: string
   text: string
   status: 'waiting' | 'active' | 'finished'
