@@ -55,6 +55,7 @@ function StudentPageContent() {
       // 常に単語モード
       if (data.wordList) {
         console.log('Setting up word mode with', data.wordList.length, 'words')
+        console.log('WordList received:', data.wordList.map((w, i) => `${i + 1}: ${w.hiragana || w.word}`))
         setWordList(data.wordList)
         setCurrentWordIndex(0)
         setRaceFinished(false)
@@ -105,6 +106,15 @@ function StudentPageContent() {
     
     if (wordList.length > 0) {
       progress = (currentWordIndex / wordList.length) * 100
+      
+      // デバッグ: 進捗計算の詳細をログ出力
+      console.log('Progress calculation debug:', {
+        completedWords,
+        wordListLength: wordList.length,
+        currentWordIndex,
+        progress,
+        calculatedProgress: (currentWordIndex / wordList.length) * 100
+      })
       
       // 正確率を計算：正解キーストローク数 / 総キーストローク数 * 100
       if (totalKeystrokes > 0) {
@@ -166,7 +176,8 @@ function StudentPageContent() {
           accuracy: stats.accuracy,
           errorCount: stats.mistakes,
           totalKeystrokes: totalKeystrokes,
-          correctKeystrokes: correctKeystrokes
+          correctKeystrokes: correctKeystrokes,
+          completedWords: stats.completedWords
         }, stats.progress)
         
         // 従来の進捗更新も維持
@@ -188,7 +199,8 @@ function StudentPageContent() {
           accuracy: stats.accuracy,
           errorCount: stats.mistakes,
           totalKeystrokes: totalKeystrokes,
-          correctKeystrokes: correctKeystrokes
+          correctKeystrokes: correctKeystrokes,
+          completedWords: stats.completedWords
         }, stats.progress)
         
         socketService.updateProgress(room.id, stats.progress, stats.wpm, stats.accuracy, currentWordIndex)
@@ -284,7 +296,15 @@ function StudentPageContent() {
                 setCurrentWordIndex(nextIndex)
                 setUserInput('')
                 
+                console.log('Word completion check (Japanese):', {
+                  nextIndex,
+                  wordListLength: wordList.length,
+                  completedWords: completedWords + 1,
+                  currentWordIndex
+                })
+                
                 if (nextIndex >= wordList.length) {
+                  console.log('Race completion triggered (Japanese)!')
                   setRaceFinished(true)
                   setFinishTime(Date.now())
                 }
@@ -308,7 +328,15 @@ function StudentPageContent() {
                 setCurrentWordIndex(nextIndex)
                 setUserInput('')
                 
+                console.log('Word completion check (English):', {
+                  nextIndex,
+                  wordListLength: wordList.length,
+                  completedWords: completedWords + 1,
+                  currentWordIndex
+                })
+                
                 if (nextIndex >= wordList.length) {
+                  console.log('Race completion triggered (English)!')
                   setRaceFinished(true)
                   setFinishTime(Date.now())
                 }

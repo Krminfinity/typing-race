@@ -46,6 +46,7 @@ function TeacherPageContent() {
   // 問題設定用の状態（文章モード削除）
   const [textType, setTextType] = useState<'japanese' | 'english' | 'romaji'>('japanese')
   const [difficulty, setDifficulty] = useState<'easy' | 'medium' | 'hard'>('easy')
+  const [wordCount, setWordCount] = useState<10 | 20 | 30>(20)
   const [customText, setCustomText] = useState('')
   const [useCustomText, setUseCustomText] = useState(false)
 
@@ -80,16 +81,24 @@ function TeacherPageContent() {
 
   const handleStartRace = () => {
     if (room && participants.length > 0) {
-      console.log('Starting race with options:', { mode: 'word', textType: 'japanese', difficulty, useCustomText, customText: customText.substring(0, 30) + '...' })
+      console.log('=== START RACE DEBUG ===')
+      console.log('Current state values:')
+      console.log('- textType:', textType)
+      console.log('- difficulty:', difficulty) 
+      console.log('- wordCount:', wordCount)
+      console.log('- useCustomText:', useCustomText)
+      console.log('- customText:', customText.substring(0, 50) + '...')
       
       const raceOptions: any = {
         mode: 'word', // 常に単語モード
-        textType: 'japanese', // 常に日本語に設定
+        textType, // 選択されたテキストタイプを使用
         difficulty,
+        wordCount,
         customText: useCustomText ? customText.trim() : undefined
       }
       
-      console.log('Word mode selected')
+      console.log('Final race options to be sent:', raceOptions)
+      console.log('=== EMITTING start-race ===')
       
       socketService.startRace(room.id, raceOptions)
       setRaceStarted(true)
@@ -490,7 +499,7 @@ function TeacherPageContent() {
               </p>
             </div>
             
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   難易度
@@ -503,6 +512,21 @@ function TeacherPageContent() {
                   <option value="easy">簡単</option>
                   <option value="medium">普通</option>
                   <option value="hard">難しい</option>
+                </select>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  問題数
+                </label>
+                <select
+                  value={wordCount}
+                  onChange={(e) => setWordCount(Number(e.target.value) as 10 | 20 | 30)}
+                  className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value={10}>10問</option>
+                  <option value={20}>20問</option>
+                  <option value={30}>30問</option>
                 </select>
               </div>
               

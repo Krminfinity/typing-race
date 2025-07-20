@@ -51,7 +51,10 @@ class SocketService {
       return this.socket
     }
 
-    this.socket = io('http://localhost:3000')
+    const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:3000'
+    console.log('Connecting to socket server:', socketUrl)
+    
+    this.socket = io(socketUrl)
     
     this.socket.on('connect', () => {
       this.isConnected = true
@@ -99,11 +102,20 @@ class SocketService {
     textType?: string
     mode?: 'sentence' | 'word'
     difficulty?: string
+    wordCount?: number
     customText?: string
   }) {
     if (!this.socket) return
-    console.log('Emitting start-race with options:', { pin, ...options })
-    this.socket.emit('start-race', { pin, ...options })
+    console.log('=== SOCKET START RACE ===')
+    console.log('Pin:', pin)
+    console.log('Options received:', JSON.stringify(options, null, 2))
+    console.log('Options.wordCount:', options.wordCount, '(type:', typeof options.wordCount, ')')
+    
+    const payload = { pin, ...options }
+    console.log('Final payload to emit:', JSON.stringify(payload, null, 2))
+    console.log('=== EMITTING start-race ===')
+    
+    this.socket.emit('start-race', payload)
   }
 
   resetRace(pin: string) {
@@ -123,6 +135,7 @@ class SocketService {
     correctKeystrokes: number
     accuracy: number
     wpm: number
+    completedWords?: number
     finished?: boolean
   }, progress?: number) {
     if (!this.socket) return

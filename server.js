@@ -3,8 +3,8 @@ const next = require('next')
 const { Server } = require('socket.io')
 
 const dev = process.env.NODE_ENV !== 'production'
-const hostname = 'localhost'
-const port = 3000
+const hostname = dev ? 'localhost' : '0.0.0.0'
+const port = process.env.PORT || 3000
 
 const app = next({ dev, hostname, port })
 const handler = app.getRequestHandler()
@@ -63,7 +63,17 @@ const wordLists = {
     { hiragana: "つき", romaji: ["tsuki", "tuki"] },
     { hiragana: "てがみ", romaji: ["tegami"] },
     { hiragana: "とり", romaji: ["tori"] },
-    { hiragana: "なまえ", romaji: ["namae"] }
+    { hiragana: "なまえ", romaji: ["namae"] },
+    { hiragana: "はな", romaji: ["hana"] },
+    { hiragana: "ひと", romaji: ["hito"] },
+    { hiragana: "ふね", romaji: ["hune"] },
+    { hiragana: "へや", romaji: ["heya"] },
+    { hiragana: "ほし", romaji: ["hoshi", "hosi"] },
+    { hiragana: "まち", romaji: ["machi", "mati"] },
+    { hiragana: "みず", romaji: ["mizu"] },
+    { hiragana: "むし", romaji: ["mushi", "musi"] },
+    { hiragana: "めがね", romaji: ["megane"] },
+    { hiragana: "もり", romaji: ["mori"] }
   ],
   japanese_medium: [
     { hiragana: "がっこう", romaji: ["gakkou", "gakkō"] },
@@ -75,7 +85,27 @@ const wordLists = {
     { hiragana: "しゅくだい", romaji: ["shukudai"] },
     { hiragana: "ひゃっか", romaji: ["hyakka"] },
     { hiragana: "ちゃいろ", romaji: ["chairo"] },
-    { hiragana: "にゃんこ", romaji: ["nyanko"] }
+    { hiragana: "にゃんこ", romaji: ["nyanko"] },
+    { hiragana: "こうえん", romaji: ["kouen", "kōen"] },
+    { hiragana: "べんきょう", romaji: ["benkyou", "benkyō"] },
+    { hiragana: "しんぶん", romaji: ["shinbun"] },
+    { hiragana: "でんき", romaji: ["denki"] },
+    { hiragana: "きんようび", romaji: ["kinyoubi", "kinyōbi"] },
+    { hiragana: "こんびに", romaji: ["konbini"] },
+    { hiragana: "ぎゅうにゅう", romaji: ["gyuunyuu", "gyūnyū"] },
+    { hiragana: "しゃしん", romaji: ["shashin"] },
+    { hiragana: "じかん", romaji: ["jikan"] },
+    { hiragana: "けいたい", romaji: ["keitai"] },
+    { hiragana: "ちょうど", romaji: ["choudo", "chōdo"] },
+    { hiragana: "ひゃくえん", romaji: ["hyakuen"] },
+    { hiragana: "りゅうこう", romaji: ["ryuukou", "ryūkō"] },
+    { hiragana: "しゅっぱつ", romaji: ["shuppatsu"] },
+    { hiragana: "ちゅうもん", romaji: ["chuumon", "chūmon"] },
+    { hiragana: "きょうだい", romaji: ["kyoudai", "kyōdai"] },
+    { hiragana: "しゃっきん", romaji: ["shakkin"] },
+    { hiragana: "びっくり", romaji: ["bikkuri"] },
+    { hiragana: "きっと", romaji: ["kitto"] },
+    { hiragana: "じっと", romaji: ["jitto"] }
   ],
   japanese_hard: [
     { hiragana: "けんきゅうしつ", romaji: ["kenkyuushitsu", "kenkyūshitsu"] },
@@ -86,7 +116,28 @@ const wordLists = {
     { hiragana: "りゅうがく", romaji: ["ryuugaku", "ryūgaku"] },
     { hiragana: "ひゃっぽん", romaji: ["hyappon"] },
     { hiragana: "きっぷ", romaji: ["kippu"] },
-    { hiragana: "しっぽ", romaji: ["shippo"] }
+    { hiragana: "しっぽ", romaji: ["shippo"] },
+    { hiragana: "ちょうせん", romaji: ["chousen", "chōsen"] },
+    { hiragana: "きょうりょく", romaji: ["kyouryoku", "kyōryoku"] },
+    { hiragana: "ちゅうがっこう", romaji: ["chuugakkou", "chūgakkō"] },
+    { hiragana: "ぎじゅつしゃ", romaji: ["gijutsusha"] },
+    { hiragana: "ちょうりし", romaji: ["chourishi", "chōrishi"] },
+    { hiragana: "ひょうじゅん", romaji: ["hyoujun", "hyōjun"] },
+    { hiragana: "ゆうびんきょく", romaji: ["yuubinkyoku", "yūbinkyoku"] },
+    { hiragana: "じゅんびうんどう", romaji: ["junbiundou", "junbiundō"] },
+    { hiragana: "ちょうしゃ", romaji: ["chousha", "chōsha"] },
+    { hiragana: "しゅっちょう", romaji: ["shucchou", "shutchō"] },
+    { hiragana: "きょうかしょ", romaji: ["kyoukasho", "kyōkasho"] },
+    { hiragana: "じゅうたく", romaji: ["juutaku", "jūtaku"] },
+    { hiragana: "りょこう", romaji: ["ryokou", "ryokō"] },
+    { hiragana: "ちゅういほう", romaji: ["chuuihou", "chūihō"] },
+    { hiragana: "しゃかいじん", romaji: ["shakaijin"] },
+    { hiragana: "でんしゃりょう", romaji: ["densharou", "densharō"] },
+    { hiragana: "きょうつう", romaji: ["kyoutsuu", "kyōtsū"] },
+    { hiragana: "ひっこし", romaji: ["hikkoshi"] },
+    { hiragana: "しっぱい", romaji: ["shippai"] },
+    { hiragana: "ちゅうしゃじょう", romaji: ["chuushajou", "chūshajō"] },
+    { hiragana: "じっけん", romaji: ["jikken"] }
   ],
   english_easy: [
     { word: "cat", romaji: ["cat"] },
@@ -98,7 +149,27 @@ const wordLists = {
     { word: "pen", romaji: ["pen"] },
     { word: "car", romaji: ["car"] },
     { word: "sun", romaji: ["sun"] },
-    { word: "moon", romaji: ["moon"] }
+    { word: "moon", romaji: ["moon"] },
+    { word: "fish", romaji: ["fish"] },
+    { word: "bird", romaji: ["bird"] },
+    { word: "tree", romaji: ["tree"] },
+    { word: "house", romaji: ["house"] },
+    { word: "food", romaji: ["food"] },
+    { word: "water", romaji: ["water"] },
+    { word: "fire", romaji: ["fire"] },
+    { word: "air", romaji: ["air"] },
+    { word: "hand", romaji: ["hand"] },
+    { word: "foot", romaji: ["foot"] },
+    { word: "head", romaji: ["head"] },
+    { word: "eye", romaji: ["eye"] },
+    { word: "ear", romaji: ["ear"] },
+    { word: "nose", romaji: ["nose"] },
+    { word: "mouth", romaji: ["mouth"] },
+    { word: "red", romaji: ["red"] },
+    { word: "blue", romaji: ["blue"] },
+    { word: "green", romaji: ["green"] },
+    { word: "white", romaji: ["white"] },
+    { word: "black", romaji: ["black"] }
   ],
   english_medium: [
     { word: "computer", romaji: ["computer"] },
@@ -110,7 +181,59 @@ const wordLists = {
     { word: "exercise", romaji: ["exercise"] },
     { word: "question", romaji: ["question"] },
     { word: "answer", romaji: ["answer"] },
-    { word: "student", romaji: ["student"] }
+    { word: "student", romaji: ["student"] },
+    { word: "teacher", romaji: ["teacher"] },
+    { word: "school", romaji: ["school"] },
+    { word: "library", romaji: ["library"] },
+    { word: "hospital", romaji: ["hospital"] },
+    { word: "restaurant", romaji: ["restaurant"] },
+    { word: "station", romaji: ["station"] },
+    { word: "airport", romaji: ["airport"] },
+    { word: "building", romaji: ["building"] },
+    { word: "mountain", romaji: ["mountain"] },
+    { word: "ocean", romaji: ["ocean"] },
+    { word: "forest", romaji: ["forest"] },
+    { word: "garden", romaji: ["garden"] },
+    { word: "kitchen", romaji: ["kitchen"] },
+    { word: "bedroom", romaji: ["bedroom"] },
+    { word: "bathroom", romaji: ["bathroom"] },
+    { word: "morning", romaji: ["morning"] },
+    { word: "evening", romaji: ["evening"] },
+    { word: "weekend", romaji: ["weekend"] },
+    { word: "holiday", romaji: ["holiday"] },
+    { word: "birthday", romaji: ["birthday"] }
+  ],
+  english_hard: [
+    { word: "programming", romaji: ["programming"] },
+    { word: "development", romaji: ["development"] },
+    { word: "technology", romaji: ["technology"] },
+    { word: "environment", romaji: ["environment"] },
+    { word: "information", romaji: ["information"] },
+    { word: "communication", romaji: ["communication"] },
+    { word: "international", romaji: ["international"] },
+    { word: "organization", romaji: ["organization"] },
+    { word: "responsibility", romaji: ["responsibility"] },
+    { word: "understanding", romaji: ["understanding"] },
+    { word: "implementation", romaji: ["implementation"] },
+    { word: "transportation", romaji: ["transportation"] },
+    { word: "administration", romaji: ["administration"] },
+    { word: "recommendation", romaji: ["recommendation"] },
+    { word: "collaboration", romaji: ["collaboration"] },
+    { word: "transformation", romaji: ["transformation"] },
+    { word: "infrastructure", romaji: ["infrastructure"] },
+    { word: "characteristic", romaji: ["characteristic"] },
+    { word: "demonstration", romaji: ["demonstration"] },
+    { word: "establishment", romaji: ["establishment"] },
+    { word: "revolutionary", romaji: ["revolutionary"] },
+    { word: "extraordinary", romaji: ["extraordinary"] },
+    { word: "contemporary", romaji: ["contemporary"] },
+    { word: "configuration", romaji: ["configuration"] },
+    { word: "documentation", romaji: ["documentation"] },
+    { word: "specification", romaji: ["specification"] },
+    { word: "psychological", romaji: ["psychological"] },
+    { word: "philosophical", romaji: ["philosophical"] },
+    { word: "sophisticated", romaji: ["sophisticated"] },
+    { word: "comprehensive", romaji: ["comprehensive"] }
   ]
 }
 
@@ -142,8 +265,9 @@ app.prepare().then(() => {
   
   const io = new Server(httpServer, {
     cors: {
-      origin: "*",
-      methods: ["GET", "POST"]
+      origin: process.env.FRONTEND_URL || "*",
+      methods: ["GET", "POST"],
+      credentials: true
     }
   })
 
@@ -237,6 +361,15 @@ app.prepare().then(() => {
 
     // Start race (teacher only)
     socket.on('start-race', (data) => {
+      console.log('=== RECEIVED START-RACE EVENT ===')
+      console.log('Raw data:', JSON.stringify(data, null, 2))
+      console.log('data.wordCount:', data.wordCount, '(type:', typeof data.wordCount, ')')
+      console.log('data.pin:', data.pin)
+      console.log('data.mode:', data.mode)
+      console.log('data.textType:', data.textType)
+      console.log('data.difficulty:', data.difficulty)
+      console.log('=== END RAW DATA ===')
+      
       const room = rooms.get(data.pin)
       
       if (!room || room.teacherId !== socket.id) {
@@ -245,6 +378,14 @@ app.prepare().then(() => {
       }
 
       console.log(`Starting race in room ${data.pin} with mode: ${data.mode}`)
+      console.log('Received race data:', {
+        mode: data.mode,
+        textType: data.textType,
+        difficulty: data.difficulty,
+        wordCount: data.wordCount,
+        customText: data.customText ? 'provided' : 'none'
+      })
+      console.log('=== RACE START DEBUG ===')
 
       let raceData = {}
       let selectedWords = null
@@ -255,9 +396,19 @@ app.prepare().then(() => {
         const wordListKey = `${data.textType}_${data.difficulty}`
         const wordList = wordLists[wordListKey] || wordLists.japanese_easy
         
-        // ランダムに20個の単語を選択
+        // 指定された問題数だけランダムに単語を選択（デフォルトは20問）
+        const wordCount = data.wordCount || 20
+        console.log(`=== WORD COUNT DEBUG ===`)
+        console.log(`Received data.wordCount: ${data.wordCount} (type: ${typeof data.wordCount})`)
+        console.log(`Final wordCount: ${wordCount}`)
+        console.log(`wordList available: ${wordList.length} words`)
+        console.log(`=== END DEBUG ===`)
+        
         const shuffled = [...wordList].sort(() => 0.5 - Math.random())
-        selectedWords = shuffled.slice(0, 20)
+        selectedWords = shuffled.slice(0, wordCount)
+        
+        console.log(`Selected ${selectedWords.length} words from ${wordList.length} available words`)
+        console.log('Selected words:', selectedWords.map((w, i) => `${i + 1}: ${w.hiragana || w.word}`))
         
         room.wordList = selectedWords
         room.currentWordIndex = 0
@@ -268,10 +419,11 @@ app.prepare().then(() => {
           wordList: selectedWords,
           startTime: Date.now(),
           textType: data.textType,
+          wordCount: wordCount,
           fixedRomajiPatterns: selectedWords.map(word => word.romaji[0]) // 固定パターンも送信
         }
         
-        console.log(`Word mode: selected ${selectedWords.length} words`)
+        console.log(`Word mode: selected ${selectedWords.length} words (requested: ${wordCount})`)
       } else {
         // 通常の文章モード
         let raceText = room.text
@@ -324,7 +476,8 @@ app.prepare().then(() => {
         hasText: !!raceData.text,
         hasWordList: !!raceData.wordList,
         wordListLength: raceData.wordList ? raceData.wordList.length : 0,
-        textType: raceData.textType
+        textType: raceData.textType,
+        actualWordList: raceData.wordList ? raceData.wordList.map((w, i) => `${i + 1}: ${w.hiragana || w.word}`) : []
       })
       
       io.to(data.pin).emit('race-started', raceData)
@@ -353,7 +506,7 @@ app.prepare().then(() => {
       participant.stats.accuracy = data.accuracy || 100
       participant.stats.mistakes = participant.typingStats?.errorCount || 0
       participant.stats.totalChars = participant.typingStats?.totalKeystrokes || 0
-      participant.stats.completedWords = data.progress ? Math.floor((data.progress / 100) * (room.wordList?.length || 0)) : 0
+      participant.stats.completedWords = data.currentWordIndex || 0
 
       // 単語モードの場合は単語インデックスも更新
       if (room.mode === 'word' && data.currentWordIndex !== undefined) {
@@ -366,8 +519,19 @@ app.prepare().then(() => {
       }
 
       // Broadcast updated participants to all in room
+      const participantsArray = Array.from(room.participants.values())
+      console.log(`Broadcasting participant-update for room ${data.pin} (update-progress):`, 
+        participantsArray.map(p => ({
+          name: p.name,
+          progress: p.progress,
+          stats: p.stats,
+          wpm: p.wpm,
+          accuracy: p.accuracy
+        }))
+      )
+      
       io.to(data.pin).emit('participant-update', {
-        participants: Array.from(room.participants.values())
+        participants: participantsArray
       })
     })
 
@@ -448,7 +612,7 @@ app.prepare().then(() => {
         participant.stats.accuracy = data.stats.accuracy || 100
         participant.stats.mistakes = data.stats.errorCount || 0
         participant.stats.totalChars = data.stats.totalKeystrokes || 0
-        participant.stats.completedWords = data.progress ? Math.floor((data.progress / 100) * (room.wordList?.length || 0)) : 0
+        participant.stats.completedWords = data.stats.completedWords || 0
         
         console.log(`After update for ${participant.name}:`, {
           totalKeystrokes: participant.typingStats.totalKeystrokes,
@@ -477,8 +641,19 @@ app.prepare().then(() => {
       }
 
       // Broadcast updated participants to all in room
+      const participantsArray = Array.from(room.participants.values())
+      console.log(`Broadcasting participant-update for room ${data.pin} (update-detailed-stats):`, 
+        participantsArray.map(p => ({
+          name: p.name,
+          progress: p.progress,
+          stats: p.stats,
+          wpm: p.wpm,
+          accuracy: p.accuracy
+        }))
+      )
+      
       io.to(data.pin).emit('participant-update', {
-        participants: Array.from(room.participants.values())
+        participants: participantsArray
       })
     })
 
