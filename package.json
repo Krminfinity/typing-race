@@ -4,8 +4,10 @@
   "private": true,
   "scripts": {
     "dev": "node server.js",
+    "dev:next": "next dev",
     "build": "next build",
     "start": "node server.js",
+    "start:next": "next start",
     "lint": "next lint"
   },
   "dependencies": {

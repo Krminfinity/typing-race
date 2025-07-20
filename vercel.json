@@ -2,17 +2,11 @@
   "version": 2,
   "builds": [
     {
-      "src": "server.js",
-      "use": "@vercel/node"
-    }
-  ],
-  "routes": [
-    {
-      "src": "/(.*)",
-      "dest": "/server.js"
+      "src": "package.json",
+      "use": "@vercel/next"
     }
   ],
   "env": {
-    "NODE_ENV": "production"
+    "NEXT_PUBLIC_SOCKET_URL": "https://typing-race-production.up.railway.app"
   }
 }

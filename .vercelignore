@@ -1,0 +1,11 @@
+# Vercelではserver.jsを無視
+server.js
+railway-server.js
+railway.json
+
+# 開発用ファイル
+.env.local
+.env.development.local
+
+# ログファイル
+*.log
