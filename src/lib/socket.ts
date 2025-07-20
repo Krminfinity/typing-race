@@ -52,10 +52,15 @@ class SocketService {
       return this.socket
     }
 
-    const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:3000'
+    // 本番環境では強制的にRailway URLを使用
+    const socketUrl = process.env.NODE_ENV === 'production' 
+      ? 'https://typing-race-production.up.railway.app'
+      : process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:3000'
+    
     console.log('=== SOCKET CONNECTION DEBUG ===')
     console.log('Socket URL:', socketUrl)
     console.log('Environment:', process.env.NODE_ENV)
+    console.log('VERCEL_ENV:', process.env.VERCEL_ENV)
     console.log('All NEXT_PUBLIC vars:', Object.keys(process.env).filter(key => key.startsWith('NEXT_PUBLIC')))
     
     this.socket = io(socketUrl, {
