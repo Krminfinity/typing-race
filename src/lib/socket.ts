@@ -260,6 +260,18 @@ class SocketService {
     this.socket.on('error', callback)
   }
 
+  // 接続状態の確認メソッド
+  isSocketConnected(): boolean {
+    return this.socket?.connected || false
+  }
+
+  // 接続再試行メソッド
+  async reconnect(): Promise<void> {
+    console.log('🔄 Attempting to reconnect...')
+    this.disconnect()
+    await this.connect()
+  }
+
   removeAllListeners() {
     if (!this.socket) return
     this.socket.removeAllListeners()

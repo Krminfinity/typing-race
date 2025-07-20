@@ -13,6 +13,8 @@ function TeacherPageContent() {
   const [participants, setParticipants] = useState<Participant[]>([])
   const [raceStarted, setRaceStarted] = useState(false)
   const [error, setError] = useState('')
+  const [isConnecting, setIsConnecting] = useState(true)
+  const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'error'>('connecting')
   
   // 全体成績統計の計算
   const calculateOverallStats = () => {
@@ -59,12 +61,18 @@ function TeacherPageContent() {
     // 非同期でSocket接続と部屋作成を実行
     const initializeRoom = async () => {
       try {
+        setIsConnecting(true)
+        setConnectionStatus('connecting')
+        setError('')
+        
         await socketService.connect()
+        setConnectionStatus('connected')
         
         // Create room
         socketService.createRoom(teacherName, (data) => {
           console.log('Room creation callback received:', data)
           setRoom(data.room)
+          setIsConnecting(false)
         })
 
         // Listen for participant updates
@@ -75,10 +83,13 @@ function TeacherPageContent() {
         // Listen for errors
         socketService.onError((data) => {
           setError(data.message)
+          setConnectionStatus('error')
         })
       } catch (error) {
         console.error('Failed to initialize room:', error)
-        setError('サーバーへの接続に失敗しました')
+        setError('サーバーへの接続に失敗しました。再度お試しください。')
+        setConnectionStatus('error')
+        setIsConnecting(false)
       }
     }
 
@@ -89,6 +100,30 @@ function TeacherPageContent() {
       socketService.disconnect()
     }
   }, [teacherName, router])
+
+  // 再接続機能
+  const handleReconnect = async () => {
+    try {
+      setIsConnecting(true)
+      setConnectionStatus('connecting')
+      setError('')
+      
+      await socketService.reconnect()
+      
+      // 部屋を再作成
+      socketService.createRoom(teacherName, (data) => {
+        console.log('Room recreated after reconnection:', data)
+        setRoom(data.room)
+        setIsConnecting(false)
+        setConnectionStatus('connected')
+      })
+    } catch (error) {
+      console.error('Reconnection failed:', error)
+      setError('再接続に失敗しました')
+      setConnectionStatus('error')
+      setIsConnecting(false)
+    }
+  }
 
   const handleStartRace = () => {
     if (room && participants.length > 0) {
@@ -204,6 +239,43 @@ function TeacherPageContent() {
           <p className="text-gray-600 mb-4">
             <span className="font-semibold">教師:</span> {teacherName}
           </p>
+          
+          {/* 接続状態表示 */}
+          <div className="mb-4">
+            {connectionStatus === 'connecting' && (
+              <div className="flex items-center text-yellow-600 bg-yellow-50 p-3 rounded-lg">
+                <div className="animate-spin h-5 w-5 border-2 border-yellow-600 border-t-transparent rounded-full mr-3"></div>
+                サーバーに接続中...
+              </div>
+            )}
+            {connectionStatus === 'connected' && !isConnecting && (
+              <div className="flex items-center text-green-600 bg-green-50 p-3 rounded-lg">
+                <div className="h-2 w-2 bg-green-600 rounded-full mr-3"></div>
+                サーバーに接続済み
+              </div>
+            )}
+            {connectionStatus === 'error' && (
+              <div className="text-red-600 bg-red-50 p-3 rounded-lg">
+                <div className="flex items-center justify-between">
+                  <span>❌ 接続エラー: {error}</span>
+                  <button
+                    onClick={handleReconnect}
+                    className="ml-4 px-3 py-1 bg-red-600 text-white rounded hover:bg-red-700 text-sm"
+                    disabled={isConnecting}
+                  >
+                    再接続
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+          
+          {isConnecting && (
+            <div className="text-center py-8">
+              <div className="animate-spin h-8 w-8 border-3 border-blue-600 border-t-transparent rounded-full mx-auto mb-4"></div>
+              <p className="text-gray-600">部屋を作成中...</p>
+            </div>
+          )}
           
           {room && (
             <div className="bg-blue-50 p-4 rounded-lg mb-4">
