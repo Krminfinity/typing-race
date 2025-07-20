@@ -46,45 +46,55 @@ class SocketService {
   private socket: ReturnType<typeof io> | null = null
   private isConnected = false
 
-  connect() {
-    if (this.socket?.connected) {
-      console.log('Socket already connected')
-      return this.socket
-    }
+  connect(): Promise<ReturnType<typeof io>> {
+    return new Promise((resolve, reject) => {
+      if (this.socket?.connected) {
+        console.log('Socket already connected')
+        resolve(this.socket)
+        return
+      }
 
-    // 本番環境では強制的にRailway URLを使用
-    const socketUrl = process.env.NODE_ENV === 'production' 
-      ? 'https://typing-race-production.up.railway.app'
-      : process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:3000'
-    
-    console.log('=== SOCKET CONNECTION DEBUG ===')
-    console.log('Socket URL:', socketUrl)
-    console.log('Environment:', process.env.NODE_ENV)
-    console.log('VERCEL_ENV:', process.env.VERCEL_ENV)
-    console.log('All NEXT_PUBLIC vars:', Object.keys(process.env).filter(key => key.startsWith('NEXT_PUBLIC')))
-    
-    this.socket = io(socketUrl, {
-      transports: ['websocket', 'polling'],
-      timeout: 20000,
-      forceNew: true
-    })
-    
-    this.socket.on('connect', () => {
-      this.isConnected = true
-      console.log('✅ Connected to server:', socketUrl)
-      console.log('Socket ID:', this.socket?.id)
-    })
+      // 本番環境では強制的にRailway URLを使用
+      const socketUrl = process.env.NODE_ENV === 'production' 
+        ? 'https://typing-race-production.up.railway.app'
+        : process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:3000'
+      
+      console.log('=== SOCKET CONNECTION DEBUG ===')
+      console.log('Socket URL:', socketUrl)
+      console.log('Environment:', process.env.NODE_ENV)
+      console.log('VERCEL_ENV:', process.env.VERCEL_ENV)
+      console.log('All NEXT_PUBLIC vars:', Object.keys(process.env).filter(key => key.startsWith('NEXT_PUBLIC')))
+      
+      this.socket = io(socketUrl, {
+        transports: ['websocket', 'polling'],
+        timeout: 20000,
+        forceNew: true
+      })
+      
+      this.socket.on('connect', () => {
+        this.isConnected = true
+        console.log('✅ Connected to server:', socketUrl)
+        console.log('Socket ID:', this.socket?.id)
+        resolve(this.socket!)
+      })
 
-    this.socket.on('disconnect', (reason) => {
-      this.isConnected = false
-      console.log('❌ Disconnected from server. Reason:', reason)
-    })
+      this.socket.on('disconnect', (reason: string) => {
+        this.isConnected = false
+        console.log('❌ Disconnected from server. Reason:', reason)
+      })
 
-    this.socket.on('connect_error', (error) => {
-      console.error('❌ Connection error:', error)
-    })
+      this.socket.on('connect_error', (error: Error) => {
+        console.error('❌ Connection error:', error)
+        reject(error)
+      })
 
-    return this.socket
+      // タイムアウト処理
+      setTimeout(() => {
+        if (!this.isConnected) {
+          reject(new Error('Connection timeout'))
+        }
+      }, 20000)
+    })
   }
 
   disconnect() {
@@ -95,30 +105,38 @@ class SocketService {
     }
   }
 
-  createRoom(teacherName: string, callback?: (data: { pin: string, room: Room }) => void) {
+  async createRoom(teacherName: string, callback?: (data: { pin: string, room: Room }) => void) {
     console.log('=== CREATE ROOM DEBUG ===')
     console.log('Teacher name:', teacherName)
-    console.log('Socket connected:', this.socket?.connected)
-    console.log('Socket ID:', this.socket?.id)
     
-    if (!this.socket) {
-      console.error('❌ No socket connection available')
-      return
-    }
+    try {
+      // 接続が完了するまで待機
+      await this.connect()
+      
+      console.log('Socket connected:', this.socket?.connected)
+      console.log('Socket ID:', this.socket?.id)
+      
+      if (!this.socket) {
+        console.error('❌ No socket connection available')
+        return
+      }
 
-    if (!this.socket.connected) {
-      console.error('❌ Socket not connected')
-      return
-    }
+      if (!this.socket.connected) {
+        console.error('❌ Socket not connected')
+        return
+      }
 
-    console.log('📤 Emitting create-room event')
-    this.socket.emit('create-room', { teacherName })
-    
-    if (callback) {
-      this.socket.on('room-created', (data) => {
-        console.log('✅ Room created:', data)
-        callback(data)
-      })
+      console.log('📤 Emitting create-room event')
+      this.socket.emit('create-room', { teacherName })
+      
+      if (callback) {
+        this.socket.on('room-created', (data: any) => {
+          console.log('✅ Room created:', data)
+          callback(data)
+        })
+      }
+    } catch (error) {
+      console.error('❌ Failed to connect and create room:', error)
     }
   }
 

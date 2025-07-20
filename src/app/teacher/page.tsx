@@ -56,22 +56,33 @@ function TeacherPageContent() {
       return
     }
 
-    socketService.connect()
+    // 非同期でSocket接続と部屋作成を実行
+    const initializeRoom = async () => {
+      try {
+        await socketService.connect()
+        
+        // Create room
+        socketService.createRoom(teacherName, (data) => {
+          console.log('Room creation callback received:', data)
+          setRoom(data.room)
+        })
 
-    // Create room
-    socketService.createRoom(teacherName, (data) => {
-      setRoom(data.room)
-    })
+        // Listen for participant updates
+        socketService.onParticipantUpdate((data) => {
+          setParticipants(data.participants)
+        })
 
-    // Listen for participant updates
-    socketService.onParticipantUpdate((data) => {
-      setParticipants(data.participants)
-    })
+        // Listen for errors
+        socketService.onError((data) => {
+          setError(data.message)
+        })
+      } catch (error) {
+        console.error('Failed to initialize room:', error)
+        setError('サーバーへの接続に失敗しました')
+      }
+    }
 
-    // Listen for errors
-    socketService.onError((data) => {
-      setError(data.message)
-    })
+    initializeRoom()
 
     return () => {
       socketService.removeAllListeners()
