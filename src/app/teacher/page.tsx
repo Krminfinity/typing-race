@@ -89,8 +89,8 @@ function TeacherPageContent() {
       console.log('- useCustomText:', useCustomText)
       console.log('- customText:', customText.substring(0, 50) + '...')
       
-      const raceOptions: any = {
-        mode: 'word', // 常に単語モード
+      const raceOptions = {
+        mode: 'word' as const, // 常に単語モード
         textType, // 選択されたテキストタイプを使用
         difficulty,
         wordCount,

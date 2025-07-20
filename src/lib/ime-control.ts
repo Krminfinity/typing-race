@@ -10,14 +10,14 @@ function forceHalfWidthMode(): void {
   // IMEの状態を強制的に半角英数字に設定を試行
   try {
     // Windows環境でのIME制御（可能な範囲で）
-    if (typeof (window as any).ActiveXObject !== 'undefined') {
+    if (typeof (window as Record<string, unknown>).ActiveXObject !== 'undefined') {
       // IE環境での制御
-      const ime = new (window as any).ActiveXObject('MSIME.Document')
+      const ime = new ((window as Record<string, unknown>).ActiveXObject as new (progid: string) => Record<string, unknown>)('MSIME.Document')
       if (ime) {
-        ime.SetModeDefault()
+        (ime as Record<string, () => void>).SetModeDefault()
       }
     }
-  } catch (e) {
+  } catch (_e) {
     // エラーは無視（ActiveXが利用できない環境）
   }
   

@@ -25,7 +25,7 @@ export interface Participant {
     finalAccuracy: number
     finalWPM: number
     finalErrorCount: number
-    wordStats: any[]
+    wordStats: Array<Record<string, unknown>>
   }
 }
 
@@ -124,7 +124,7 @@ class SocketService {
     this.socket.emit('reset-race', { pin })
   }
 
-  updateTypingStats(pin: string, progress: number, typingStats: any, wordStats?: any) {
+  updateTypingStats(pin: string, progress: number, typingStats: Record<string, unknown>, wordStats?: Record<string, unknown>) {
     if (!this.socket) return
     this.socket.emit('update-typing-stats', { pin, progress, typingStats, wordStats })
   }
