@@ -48,22 +48,35 @@ class SocketService {
 
   connect() {
     if (this.socket?.connected) {
+      console.log('Socket already connected')
       return this.socket
     }
 
     const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:3000'
-    console.log('Connecting to socket server:', socketUrl)
+    console.log('=== SOCKET CONNECTION DEBUG ===')
+    console.log('Socket URL:', socketUrl)
+    console.log('Environment:', process.env.NODE_ENV)
+    console.log('All NEXT_PUBLIC vars:', Object.keys(process.env).filter(key => key.startsWith('NEXT_PUBLIC')))
     
-    this.socket = io(socketUrl)
+    this.socket = io(socketUrl, {
+      transports: ['websocket', 'polling'],
+      timeout: 20000,
+      forceNew: true
+    })
     
     this.socket.on('connect', () => {
       this.isConnected = true
-      console.log('Connected to server')
+      console.log('✅ Connected to server:', socketUrl)
+      console.log('Socket ID:', this.socket?.id)
     })
 
-    this.socket.on('disconnect', () => {
+    this.socket.on('disconnect', (reason) => {
       this.isConnected = false
-      console.log('Disconnected from server')
+      console.log('❌ Disconnected from server. Reason:', reason)
+    })
+
+    this.socket.on('connect_error', (error) => {
+      console.error('❌ Connection error:', error)
     })
 
     return this.socket
@@ -78,12 +91,29 @@ class SocketService {
   }
 
   createRoom(teacherName: string, callback?: (data: { pin: string, room: Room }) => void) {
-    if (!this.socket) return
+    console.log('=== CREATE ROOM DEBUG ===')
+    console.log('Teacher name:', teacherName)
+    console.log('Socket connected:', this.socket?.connected)
+    console.log('Socket ID:', this.socket?.id)
+    
+    if (!this.socket) {
+      console.error('❌ No socket connection available')
+      return
+    }
 
+    if (!this.socket.connected) {
+      console.error('❌ Socket not connected')
+      return
+    }
+
+    console.log('📤 Emitting create-room event')
     this.socket.emit('create-room', { teacherName })
     
     if (callback) {
-      this.socket.on('room-created', callback)
+      this.socket.on('room-created', (data) => {
+        console.log('✅ Room created:', data)
+        callback(data)
+      })
     }
   }
 
