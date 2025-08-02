@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 
 export default function Home() {
   const [userType, setUserType] = useState<'teacher' | 'student' | null>(null)
@@ -45,6 +46,13 @@ export default function Home() {
           <p className="text-gray-600">
             教室でみんなで楽しくタイピング競争！
           </p>
+          <div className="mt-2">
+            <Link href="/help">
+              <button className="text-sm text-blue-500 hover:underline">
+                使い方
+              </button>
+            </Link>
+          </div>
         </div>
 
         {!userType && (
