@@ -28,11 +28,11 @@ export async function generateMetadata(): Promise<Metadata> {
     title: 'TypeGo - 教室向けタイピング競技',
     description: 'Next.js × Socket.io で作る教室向けタイピングレース。PIN で簡単参加、リアルタイム進捗・順位表示。',
     keywords,
-    // ファビコンと Apple Touch Icon を 512px アイコンで統一
+    // ファビコンと Apple Touch Icon を正しいパスで参照
     icons: {
-      icon: 'public/icon-512.png',
-      shortcut: 'public/icon-512.png',
-      apple: 'public/icon-512.png'
+      icon: 'favicon.ico',
+      shortcut: 'favicon.ico',
+      apple: 'apple-touch-icon.png',
     },
     openGraph: {
       title: 'TypeGo｜教室向けリアルタイムタイピング競技',
