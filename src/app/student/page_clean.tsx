@@ -235,7 +235,7 @@ function StudentPageContent() {
         <div className="bg-white rounded-xl shadow-xl p-6 mb-6">
           <div className="flex justify-between items-center mb-4">
             <h1 className="text-3xl font-bold text-gray-800">
-              🏃‍♂️ タイピング競争
+              � KeyDojo
             </h1>
             <button
               onClick={handleBackToHome}

@@ -4,7 +4,7 @@ export default function HelpPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
       <div className="bg-white rounded-xl shadow-xl p-8 w-full max-w-lg">
-        <h1 className="text-2xl font-bold mb-4">📖 Typing Race の使い方</h1>
+        <h1 className="text-2xl font-bold mb-4">📖 KeyDojo の使い方</h1>
         <div className="text-gray-700 space-y-6">
           {/* 先生：ルーム作成 */}
           <div>

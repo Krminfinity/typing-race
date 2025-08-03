@@ -25,7 +25,7 @@ export async function generateMetadata(): Promise<Metadata> {
     .slice(0, 50);
   return {
     // タブに表示されるサイト名を絵文字付きでわかりやすく
-    title: 'TypeGo - 教室向けタイピング競技',
+    title: 'KeyDojo - 教室向けタイピング競技',
     description: 'Next.js × Socket.io で作る教室向けタイピングレース。PIN で簡単参加、リアルタイム進捗・順位表示。',
     keywords,
     // ファビコンと Apple Touch Icon を正しいパスで参照
@@ -35,10 +35,10 @@ export async function generateMetadata(): Promise<Metadata> {
       apple: 'apple-touch-icon.png',
     },
     openGraph: {
-      title: 'TypeGo｜教室向けリアルタイムタイピング競技',
+      title: 'KeyDojo｜教室向けリアルタイムタイピング競技',
       description: 'Next.js × Socket.io で作る教室向けタイピングレース。PIN で簡単参加、リアルタイム進捗・順位表示。',
       url: 'https://typing-race-eight.vercel.app',
-      siteName: 'TypeGo',
+      siteName: 'KeyDojo',
       locale: 'ja_JP',
       type: 'website',
     },

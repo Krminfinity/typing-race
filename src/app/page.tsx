@@ -41,7 +41,7 @@ export default function Home() {
       <div className="bg-white rounded-xl shadow-xl p-8 w-full max-w-md">
         <div className="text-center mb-8">
           <h1 className="text-3xl font-bold text-gray-800 mb-2">
-            タイピング競争
+            KeyDojo
           </h1>
           <p className="text-gray-600">
             教室でみんなで楽しくタイピング競争！
